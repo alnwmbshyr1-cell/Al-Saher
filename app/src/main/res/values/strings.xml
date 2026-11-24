@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
 <resources>
     <string name="app_name">الساحر - Al Saher</string>
     <string name="chat_screen_title">محادثة وكيل الساحر (Firebase AI)</string>
@@ -34,4 +35,6 @@
     <string name="usage_dashboard_icon_desc">أيقونة لوحة الاستهلاك</string>
     <string name="usage_dashboard_title">لوحة استهلاك الذكاء الاصطناعي</string>
     <string name="usage_dashboard_subtitle">متابعة استهلاك النقاط اليومي والشهري وتوزيع الخدمات من سجل مهامك</string>
+    <string name="firestore_database_id" translatable="false">ai-studio-android-alsaher-f3f4cb4f-aa39-400b-81c2-91303e09ca50</string>
+    <string name="recaptcha_site_key" translatable="false">6LcsaS4uAAAAADVh2N8pXBltt0MWj-qjRJdeZjLK</string>
 </resources>
