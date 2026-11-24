@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile, subscription plan, and credit balance.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Display name" },
+        "email": { "type": "string", "description": "User email" },
+        "plan": { "type": "string", "enum": ["FREE", "PRO", "TEAM"], "description": "Pricing tier" },
+        "creditsBalance": { "type": "integer", "description": "Remaining AI credits (1000 signup bonus)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "plan", "creditsBalance", "createdAt", "updatedAt"]
+    },
+    "AgentTask": {
+      "title": "AgentTask",
+      "description": "General AI Agent or Free AI Chat session with execution steps and deliverables.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "mode": { "type": "string", "enum": ["AGENT", "CHAT"] },
+        "category": { "type": "string", "enum": ["GENERAL", "VIDEO", "SLIDES", "DOCS", "WEB", "APP", "GAME", "RESEARCH", "REMOTE"] },
+        "status": { "type": "string", "enum": ["PLANNING", "RUNNING", "PAUSED", "COMPLETED", "STOPPED", "ERROR"] },
+        "prompt": { "type": "string" },
+        "summary": { "type": "string" },
+        "stepTitles": { "type": "array", "description": "Ordered step labels (max 15)" },
+        "currentStepIndex": { "type": "integer" },
+        "deliverableTitle": { "type": "string" },
+        "deliverableContent": { "type": "string" },
+        "creditsUsed": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "mode", "category", "status", "prompt", "summary", "stepTitles", "currentStepIndex", "deliverableTitle", "deliverableContent", "creditsUsed", "createdAt", "updatedAt"]
+    },
+    "TaskMessage": {
+      "title": "TaskMessage",
+      "description": "Chat or Agent message within a task session.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["USER", "ASSISTANT", "SYSTEM"] },
+        "content": { "type": "string" },
+        "mode": { "type": "string", "enum": ["AGENT", "CHAT"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "content", "mode", "createdAt", "updatedAt"]
+    },
+    "StudioProject": {
+      "title": "StudioProject",
+      "description": "Editable AI Video, Slides, Docs/Wide Research, Website, App, or Game project.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "studioType": { "type": "string", "enum": ["VIDEO", "SLIDES", "DOCS", "WEB", "APP", "GAME"] },
+        "subType": { "type": "string" },
+        "prompt": { "type": "string" },
+        "content": { "type": "string" },
+        "tracksSummary": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT", "READY", "EXPORTED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "studioType", "subType", "prompt", "content", "tracksSummary", "status", "createdAt", "updatedAt"]
+    },
+    "AutomationRule": {
+      "title": "AutomationRule",
+      "description": "Scheduled or event-triggered workflow automation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "triggerType": { "type": "string", "enum": ["SCHEDULE", "NEW_EMAIL", "CALENDAR_EVENT", "SLACK_MESSAGE", "NOTION_UPDATE"] },
+        "triggerDetail": { "type": "string" },
+        "actionPrompt": { "type": "string" },
+        "active": { "type": "boolean" },
+        "runsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "triggerType", "triggerDetail", "actionPrompt", "active", "runsCount", "createdAt", "updatedAt"]
+    },
+    "ConnectorState": {
+      "title": "ConnectorState",
+      "description": "Connected third-party app integration state.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "connectorKey": { "type": "string" },
+        "displayName": { "type": "string" },
+        "connected": { "type": "boolean" },
+        "accountLabel": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "connectorKey", "displayName", "connected", "accountLabel", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile, pricing tier, and credit balance."
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/AgentTask" },
+      "description": "AI Agent and Free Chat tasks owned by the user."
+    },
+    "/users/{userId}/tasks/{taskId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/TaskMessage" },
+      "description": "Conversation messages inside a task."
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/StudioProject" },
+      "description": "Creative studio deliverables (Video, Slides, Docs, Web, App, Game)."
+    },
+    "/users/{userId}/automations/{automationId}": {
+      "schema": { "$ref": "#/entities/AutomationRule" },
+      "description": "Scheduled and trigger-driven automations."
+    },
+    "/users/{userId}/connectors/{connectorId}": {
+      "schema": { "$ref": "#/entities/ConnectorState" },
+      "description": "Connected third-party integrations."
+    }
+  }
+}

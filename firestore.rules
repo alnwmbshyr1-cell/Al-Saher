@@ -1,0 +1,246 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUserProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120)) &&
+             data.plan in ['FREE', 'PRO', 'TEAM'] &&
+             data.creditsBalance is int && data.creditsBalance >= 0 && data.creditsBalance <= 1000000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAgentTask(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             data.mode in ['AGENT', 'CHAT'] &&
+             data.category in ['GENERAL', 'VIDEO', 'SLIDES', 'DOCS', 'WEB', 'APP', 'GAME', 'RESEARCH', 'REMOTE'] &&
+             data.status in ['PLANNING', 'RUNNING', 'PAUSED', 'COMPLETED', 'STOPPED', 'ERROR'] &&
+             data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 4000 &&
+             data.summary is string && data.summary.size() <= 12000 &&
+             data.stepTitles is list && data.stepTitles.size() <= 15 &&
+             (data.stepTitles.size() == 0 || data.stepTitles[0] is string) &&
+             data.currentStepIndex is int && data.currentStepIndex >= 0 && data.currentStepIndex <= 20 &&
+             data.deliverableTitle is string && data.deliverableTitle.size() <= 200 &&
+             data.deliverableContent is string && data.deliverableContent.size() <= 24000 &&
+             data.creditsUsed is int && data.creditsUsed >= 0 && data.creditsUsed <= 10000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTaskMessage(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.role in ['USER', 'ASSISTANT', 'SYSTEM'] &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 16000 &&
+             data.mode in ['AGENT', 'CHAT'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStudioProject(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             data.studioType in ['VIDEO', 'SLIDES', 'DOCS', 'WEB', 'APP', 'GAME'] &&
+             data.subType is string && data.subType.size() <= 80 &&
+             data.prompt is string && data.prompt.size() <= 4000 &&
+             data.content is string && data.content.size() <= 24000 &&
+             data.tracksSummary is string && data.tracksSummary.size() <= 8000 &&
+             data.status in ['DRAFT', 'READY', 'EXPORTED'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAutomationRule(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.triggerType in ['SCHEDULE', 'NEW_EMAIL', 'CALENDAR_EVENT', 'SLACK_MESSAGE', 'NOTION_UPDATE'] &&
+             data.triggerDetail is string && data.triggerDetail.size() >= 1 && data.triggerDetail.size() <= 200 &&
+             data.actionPrompt is string && data.actionPrompt.size() >= 1 && data.actionPrompt.size() <= 2000 &&
+             data.active is bool &&
+             data.runsCount is int && data.runsCount >= 0 && data.runsCount <= 100000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidConnectorState(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.connectorKey is string && data.connectorKey.size() >= 1 && data.connectorKey.size() <= 40 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.connected is bool &&
+             data.accountLabel is string && data.accountLabel.size() <= 120 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- USER PROFILE & WORKSPACE COLLECTIONS ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'plan', 'creditsBalance', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'plan', 'creditsBalance', 'createdAt', 'updatedAt']) &&
+                       incoming().plan == 'FREE' &&
+                       incoming().creditsBalance == 1000 &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         incoming().diff(existing()).affectedKeys().hasOnly(['creditsBalance', 'updatedAt']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'creditsBalance', 'updatedAt']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'updatedAt'])
+                       );
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // --- TASKS ---
+      match /tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(taskId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'mode', 'category', 'status', 'prompt', 'summary', 'stepTitles', 'currentStepIndex', 'deliverableTitle', 'deliverableContent', 'creditsUsed', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'mode', 'category', 'status', 'prompt', 'summary', 'stepTitles', 'currentStepIndex', 'deliverableTitle', 'deliverableContent', 'creditsUsed', 'createdAt', 'updatedAt']) &&
+                         isValidAgentTask(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         isValidAgentTask(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'currentStepIndex', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'prompt', 'mode', 'status', 'stepTitles', 'currentStepIndex', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'summary', 'stepTitles', 'currentStepIndex', 'deliverableTitle', 'deliverableContent', 'creditsUsed', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(taskId);
+
+        // --- TASK MESSAGES ---
+        match /messages/{messageId} {
+          allow get: if isOwner(userId) && isValidId(taskId) && isValidId(messageId);
+          allow list: if isOwner(userId) && isValidId(taskId);
+
+          allow create: if isOwner(userId) &&
+                           isValidId(taskId) &&
+                           isValidId(messageId) &&
+                           incoming().keys().hasAll(['userId', 'role', 'content', 'mode', 'createdAt', 'updatedAt']) &&
+                           incoming().keys().hasOnly(['userId', 'role', 'content', 'mode', 'createdAt', 'updatedAt']) &&
+                           isValidTaskMessage(incoming(), userId);
+
+          allow update: if isOwner(userId) &&
+                           isValidId(taskId) &&
+                           isValidId(messageId) &&
+                           isValidTaskMessage(incoming(), userId) &&
+                           incoming().userId == existing().userId &&
+                           incoming().createdAt == existing().createdAt &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']);
+
+          allow delete: if isOwner(userId) && isValidId(taskId) && isValidId(messageId);
+        }
+      }
+
+      // --- STUDIO PROJECTS ---
+      match /projects/{projectId} {
+        allow get: if isOwner(userId) && isValidId(projectId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(projectId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'studioType', 'subType', 'prompt', 'content', 'tracksSummary', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'studioType', 'subType', 'prompt', 'content', 'tracksSummary', 'status', 'createdAt', 'updatedAt']) &&
+                         isValidStudioProject(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(projectId) &&
+                         isValidStudioProject(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'subType', 'prompt', 'content', 'tracksSummary', 'status', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(projectId);
+      }
+
+      // --- AUTOMATIONS ---
+      match /automations/{automationId} {
+        allow get: if isOwner(userId) && isValidId(automationId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(automationId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'triggerType', 'triggerDetail', 'actionPrompt', 'active', 'runsCount', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'triggerType', 'triggerDetail', 'actionPrompt', 'active', 'runsCount', 'createdAt', 'updatedAt']) &&
+                         isValidAutomationRule(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(automationId) &&
+                         isValidAutomationRule(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           incoming().diff(existing()).affectedKeys().hasOnly(['active', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['runsCount', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'triggerType', 'triggerDetail', 'actionPrompt', 'active', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(automationId);
+      }
+
+      // --- CONNECTORS ---
+      match /connectors/{connectorId} {
+        allow get: if isOwner(userId) && isValidId(connectorId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(connectorId) &&
+                         incoming().keys().hasAll(['userId', 'connectorKey', 'displayName', 'connected', 'accountLabel', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'connectorKey', 'displayName', 'connected', 'accountLabel', 'createdAt', 'updatedAt']) &&
+                         isValidConnectorState(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(connectorId) &&
+                         isValidConnectorState(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['connected', 'accountLabel', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(connectorId);
+      }
+    }
+  }
+}

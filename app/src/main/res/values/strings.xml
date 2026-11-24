@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">الساحر - Al Saher</string>
+    <string name="chat_screen_title">محادثة وكيل الساحر (Firebase AI)</string>
+    <string name="chat_screen_subtitle">النموذج النشط: %1$s</string>
+    <string name="chat_screen_agent_icon_desc">أيقونة وكيل الذكاء الاصطناعي</string>
+    <string name="chat_screen_clear_desc">بدء محادثة جديدة</string>
+    <string name="chat_screen_search_desc">تفعيل بحث Google الحي</string>
+    <string name="chat_screen_google_search">بحث Google</string>
+    <string name="chat_screen_welcome_title">تحدّث مباشرة مع وكيل Firebase AI</string>
+    <string name="chat_screen_welcome_body">اسأل، حلّل الصور، واستفد من تدفق الإجابات الفوري والبحث الحي عبر Google باستخدام حزمة Firebase AI Logic.</string>
+    <string name="chat_screen_suggestions_label">أفكار سريعة للبدء</string>
+    <string name="chat_screen_error_desc">خطأ في الاتصال بالنموذج</string>
+    <string name="chat_screen_retry">إعادة المحاولة</string>
+    <string name="chat_screen_dismiss_error">إغلاق التنبيه</string>
+    <string name="chat_screen_attached_image_desc">صورة مرفقة في المحادثة</string>
+    <string name="chat_screen_image_ready">تم إرفاق الصورة وجاهزة للإرسال مع رسالتك</string>
+    <string name="chat_screen_remove_image_desc">إزالة الصورة المرفقة</string>
+    <string name="chat_screen_attach_image_desc">إرفاق صورة للتحليل</string>
+    <string name="chat_screen_input_placeholder">اكتب رسالتك لوكيل الذكاء الاصطناعي...</string>
+    <string name="chat_screen_stop_desc">إيقاف توليد الرد</string>
+    <string name="chat_screen_send_desc">إرسال الرسالة</string>
+    <string name="chat_screen_copy_desc">نسخ نص الرد</string>
+    <string name="chat_screen_sources_title">المصادر من بحث Google:</string>
+    <string name="chat_screen_streaming_status">وكيل الساحر يكتب الآن...</string>
+</resources>

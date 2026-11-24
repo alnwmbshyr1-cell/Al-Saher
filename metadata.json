@@ -1,0 +1,6 @@
+{
+  "name": "الساحر - Al Saher",
+  "description": "منصة الساحر للوكيل الذكي العام، توليد الفيديو، العروض التقديمية، الأتمتة، وبناء المواقع والتطبيقات والألعاب.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
