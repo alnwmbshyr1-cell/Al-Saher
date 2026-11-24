@@ -60,6 +60,7 @@ private val AlSaherLightColorScheme = lightColorScheme(
     onSurface = TextPrimaryLight,
     surfaceVariant = DaylightSurfaceElevated,
     onSurfaceVariant = TextSecondaryLight,
+    surfaceContainerHigh = DaylightSurfaceHighest,
     outline = DaylightOutline,
     outlineVariant = DaylightOutline.copy(alpha = 0.65f)
 )

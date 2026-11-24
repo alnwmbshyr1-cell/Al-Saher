@@ -76,7 +76,8 @@ private fun AlSaherAppRoot() {
                             currentUserId = uid,
                             userDisplayName = user.displayName ?: "مستخدم الساحر",
                             userEmail = user.email ?: "",
-                            themePreferences = themePreferences
+                            themePreferences = themePreferences,
+                            initialDarkTheme = persistedDarkTheme
                         )
                     }
                 }

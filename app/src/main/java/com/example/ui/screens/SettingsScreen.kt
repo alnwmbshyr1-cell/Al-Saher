@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -421,21 +422,23 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Text(
-                                text = "تفضيلات الحساب ومساحة العمل",
+                                text = stringResource(R.string.settings_appearance_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
 
-                            PreferenceSwitchRow(
-                                icon = Icons.Filled.DarkMode,
-                                title = "الوضع الداكن",
-                                subtitle = "التبديل بين المظهر الداكن والمضيء",
-                                checked = preferences.isDarkTheme,
-                                onCheckedChange = onSetDarkTheme,
-                                testTag = "settings_dark_theme_switch"
+                            ThemeAppearanceToggleCard(
+                                isDarkTheme = preferences.isDarkTheme,
+                                onSetDarkTheme = onSetDarkTheme
                             )
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                            Text(
+                                text = "تفضيلات الحساب ومساحة العمل",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
 
                             PreferenceSwitchRow(
                                 icon = Icons.Filled.NotificationsActive,
@@ -599,6 +602,168 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun ThemeAppearanceToggleCard(
+    isDarkTheme: Boolean,
+    onSetDarkTheme: (Boolean) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant,
+                RoundedCornerShape(16.dp)
+            )
+            .testTag("settings_theme_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isDarkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = stringResource(R.string.settings_dark_mode_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_dark_mode_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(
+                    checked = isDarkTheme,
+                    onCheckedChange = onSetDarkTheme,
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (isDarkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("settings_dark_theme_switch")
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ThemeModeOptionCard(
+                    label = stringResource(R.string.settings_light_mode_label),
+                    icon = Icons.Filled.LightMode,
+                    selected = !isDarkTheme,
+                    onClick = { onSetDarkTheme(false) },
+                    testTag = "settings_light_theme_button",
+                    modifier = Modifier.weight(1f)
+                )
+                ThemeModeOptionCard(
+                    label = stringResource(R.string.settings_dark_mode_label),
+                    icon = Icons.Filled.DarkMode,
+                    selected = isDarkTheme,
+                    onClick = { onSetDarkTheme(true) },
+                    testTag = "settings_dark_theme_button",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeOptionCard(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                },
+                shape = RoundedCornerShape(12.dp)
+            )
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+        }
+    }
+}
+
+@Composable
 private fun PreferenceSwitchRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
@@ -608,7 +773,9 @@ private fun PreferenceSwitchRow(
     testTag: String
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

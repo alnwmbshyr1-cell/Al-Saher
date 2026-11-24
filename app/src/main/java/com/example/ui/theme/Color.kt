@@ -32,6 +32,7 @@ val TextSecondaryDark = Color(0xFF94A3B8)
 val DaylightBg = Color(0xFFF8FAFC)
 val DaylightSurface = Color(0xFFFFFFFF)
 val DaylightSurfaceElevated = Color(0xFFEEF2F7)
+val DaylightSurfaceHighest = Color(0xFFE2E8F0)
 val DaylightOutline = Color(0xFFCBD5E1)
 
 val CyanLightPrimary = Color(0xFF0891B2)

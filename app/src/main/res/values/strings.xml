@@ -26,6 +26,11 @@
     <string name="settings_screen_title">الإعدادات وإدارة الحساب</string>
     <string name="settings_screen_subtitle">عرض بيانات ملفك الشخصي وتخصيص تفضيلات التطبيق</string>
     <string name="settings_verified_account_desc">حساب موثق</string>
+    <string name="settings_appearance_title">المظهر والسمة</string>
+    <string name="settings_dark_mode_title">الوضع الداكن</string>
+    <string name="settings_dark_mode_subtitle">التبديل بين المظهر الداكن والمضيء وحفظ اختيارك تلقائياً</string>
+    <string name="settings_light_mode_label">الوضع المضيء</string>
+    <string name="settings_dark_mode_label">الوضع الداكن</string>
     <string name="usage_dashboard_icon_desc">أيقونة لوحة الاستهلاك</string>
     <string name="usage_dashboard_title">لوحة استهلاك الذكاء الاصطناعي</string>
     <string name="usage_dashboard_subtitle">متابعة استهلاك النقاط اليومي والشهري وتوزيع الخدمات من سجل مهامك</string>

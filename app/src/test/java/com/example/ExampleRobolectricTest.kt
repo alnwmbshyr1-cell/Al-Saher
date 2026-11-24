@@ -32,8 +32,10 @@ class ExampleRobolectricTest {
 
     prefs.setDarkTheme(false)
     assertFalse(prefs.isDarkThemeFlow.first())
+    assertFalse(ThemePreferences(context).accountPreferencesFlow.first().isDarkTheme)
 
     prefs.setDarkTheme(true)
     assertTrue(prefs.isDarkThemeFlow.first())
+    assertTrue(ThemePreferences(context).accountPreferencesFlow.first().isDarkTheme)
   }
 }

@@ -88,7 +88,8 @@ class AlSaherViewModel(
     private val currentUserId: String,
     private val userDisplayName: String,
     private val userEmail: String,
-    private val themePreferences: ThemePreferences? = null
+    private val themePreferences: ThemePreferences? = null,
+    initialDarkTheme: Boolean = true
 ) : ViewModel() {
 
     private val _destination = MutableStateFlow(WorkspaceDestination.CHAT_AGENT)
@@ -115,7 +116,7 @@ class AlSaherViewModel(
     private val _notifyOnComplete = MutableStateFlow(true)
     val notifyOnComplete: StateFlow<Boolean> = _notifyOnComplete.asStateFlow()
 
-    private val _isDarkTheme = MutableStateFlow(true)
+    private val _isDarkTheme = MutableStateFlow(initialDarkTheme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
     private val _showPricingSheet = MutableStateFlow(false)
@@ -148,7 +149,7 @@ class AlSaherViewModel(
     private val _isSavingProfile = MutableStateFlow(false)
     val isSavingProfile: StateFlow<Boolean> = _isSavingProfile.asStateFlow()
 
-    private val _accountPreferences = MutableStateFlow(AccountPreferences())
+    private val _accountPreferences = MutableStateFlow(AccountPreferences(isDarkTheme = initialDarkTheme))
     val accountPreferences: StateFlow<AccountPreferences> = _accountPreferences.asStateFlow()
 
     // Studio state holders
@@ -307,6 +308,7 @@ class AlSaherViewModel(
 
     fun setDarkTheme(isDark: Boolean) {
         _isDarkTheme.value = isDark
+        _accountPreferences.value = _accountPreferences.value.copy(isDarkTheme = isDark)
         themePreferences?.let { prefs ->
             viewModelScope.launch {
                 prefs.setDarkTheme(isDark)
@@ -320,6 +322,7 @@ class AlSaherViewModel(
 
     fun setNotifyOnComplete(enabled: Boolean) {
         _notifyOnComplete.value = enabled
+        _accountPreferences.value = _accountPreferences.value.copy(notifyOnComplete = enabled)
         themePreferences?.let { prefs ->
             viewModelScope.launch { prefs.setNotifyOnComplete(enabled) }
         }
@@ -327,6 +330,7 @@ class AlSaherViewModel(
 
     fun setDefaultAgentModePreference(mode: AgentMode) {
         _agentMode.value = mode
+        _accountPreferences.value = _accountPreferences.value.copy(defaultAgentMode = mode)
         themePreferences?.let { prefs ->
             viewModelScope.launch { prefs.setDefaultAgentMode(mode) }
         }
@@ -338,6 +342,7 @@ class AlSaherViewModel(
 
     fun setChatTier(tier: GeminiChatTier) {
         _chatTier.value = tier
+        _accountPreferences.value = _accountPreferences.value.copy(defaultChatTier = tier)
         themePreferences?.let { prefs ->
             viewModelScope.launch { prefs.setDefaultChatTier(tier) }
         }
@@ -345,6 +350,7 @@ class AlSaherViewModel(
 
     fun setChatbotRole(role: ChatbotRole) {
         _chatbotRole.value = role
+        _accountPreferences.value = _accountPreferences.value.copy(defaultChatbotRole = role)
         themePreferences?.let { prefs ->
             viewModelScope.launch { prefs.setDefaultChatbotRole(role) }
         }
@@ -353,6 +359,7 @@ class AlSaherViewModel(
     fun toggleSearchGrounding() {
         val next = !_searchGroundingEnabled.value
         _searchGroundingEnabled.value = next
+        _accountPreferences.value = _accountPreferences.value.copy(defaultSearchGrounding = next)
         themePreferences?.let { prefs ->
             viewModelScope.launch { prefs.setDefaultSearchGrounding(next) }
         }
@@ -360,6 +367,7 @@ class AlSaherViewModel(
 
     fun setDefaultSearchGrounding(enabled: Boolean) {
         _searchGroundingEnabled.value = enabled
+        _accountPreferences.value = _accountPreferences.value.copy(defaultSearchGrounding = enabled)
         themePreferences?.let { prefs ->
             viewModelScope.launch { prefs.setDefaultSearchGrounding(enabled) }
         }
