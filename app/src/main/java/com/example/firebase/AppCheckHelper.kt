@@ -8,7 +8,6 @@ import com.example.R
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
 
 private const val TAG = "AppCheckInit"
@@ -36,7 +35,6 @@ fun configureAppCheck(context: Context, intent: Intent?) {
                         "$DEBUG_STORE_PREFIX$persistenceKey",
                         Context.MODE_PRIVATE
                     )
-                    // Synchronous commit() is required before DebugAppCheckProviderFactory reads it
                     prefs.edit()
                         .putString(DEBUG_SECRET_KEY, debugToken)
                         .commit()
@@ -59,18 +57,7 @@ fun configureAppCheck(context: Context, intent: Intent?) {
             return
         }
 
-        // ===== RELEASE: جرب Play Integrity اولاً، هو الصح للجوال =====
-        try {
-            appCheck.installAppCheckProviderFactory(
-                PlayIntegrityAppCheckProviderFactory.getInstance()
-            )
-            Log.d(TAG, "PlayIntegrityAppCheckProviderFactory installed.")
-            return
-        } catch (e: Exception) {
-            Log.e(TAG, "Play Integrity failed, trying reCAPTCHA", e)
-        }
-
-        // ===== لو فشل Play Integrity، جرب reCAPTCHA =====
+        // ===== RELEASE: استخدم reCAPTCHA مباشرة، بدون Play Integrity =====
         try {
             val resId = context.resources.getIdentifier(
                 RECAPTCHA_SITE_KEY_RES,
@@ -95,12 +82,9 @@ fun configureAppCheck(context: Context, intent: Intent?) {
             Log.e(TAG, "reCAPTCHA failed", e)
         }
 
-        // ===== اخر حل: لا نطفي التطبيق، نخليه يشتغل بدون App Check =====
-        // عشان لو App Check فشل كلياً، Firestore يشتغل بالـ Rules العادية
         Log.w(TAG, "App Check failed completely, continuing without it to avoid crash")
 
     } catch (e: Exception) {
         Log.e(TAG, "Failed to initialize Firebase App Check", e)
-        // اهم شي: لا نرمي Exception، التطبيق لازم يفتح
     }
 }
