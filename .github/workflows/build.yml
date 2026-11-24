@@ -62,7 +62,7 @@ jobs:
           gradle-version: "9.3.1"
 
       - name: Build Debug APK
-        run: gradle assembleDebug --console=plain --stacktrace
+        run: gradle assembleDebug --no-configuration-cache --console=plain --stacktrace
 
       - name: Upload app-debug.apk Artifact
         uses: actions/upload-artifact@v4
