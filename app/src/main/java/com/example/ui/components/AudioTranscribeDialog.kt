@@ -171,14 +171,14 @@ fun AudioTranscribeDialog(
                         }
                     }
 
-                    if (!localError.isNullOrBlank()) {
+                    localError?.takeIf { it.isNotBlank() }?.let { err ->
                         Surface(
                             color = MaterialTheme.colorScheme.errorContainer,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = localError!!,
+                                text = err,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 modifier = Modifier.padding(10.dp)

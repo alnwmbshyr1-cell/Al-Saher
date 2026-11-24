@@ -253,26 +253,37 @@ class AlSaherViewModel(
 
     init {
         viewModelScope.launch {
-            repository.ensureUserProfile(currentUserId, userDisplayName, userEmail)
-                .onFailure { e ->
-                    Log.w(TAG, "Profile bootstrap failed", e)
-                }
+            try {
+                repository.ensureUserProfile(currentUserId, userDisplayName, userEmail)
+                    .onFailure { e ->
+                        Log.w(TAG, "Profile bootstrap failed", e)
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Profile bootstrap crashed safely", e)
+            }
         }
         themePreferences?.let { prefs ->
             viewModelScope.launch {
                 var firstLoad = true
-                prefs.accountPreferencesFlow.collect { savedPrefs ->
-                    _accountPreferences.value = savedPrefs
-                    _isDarkTheme.value = savedPrefs.isDarkTheme
-                    _notifyOnComplete.value = savedPrefs.notifyOnComplete
-                    if (firstLoad) {
-                        _agentMode.value = savedPrefs.defaultAgentMode
-                        _chatTier.value = savedPrefs.defaultChatTier
-                        _chatbotRole.value = savedPrefs.defaultChatbotRole
-                        _searchGroundingEnabled.value = savedPrefs.defaultSearchGrounding
-                        firstLoad = false
+                prefs.accountPreferencesFlow
+                    .catch { err ->
+                        if (err is CancellationException) throw err
+                        Log.w(TAG, "Account preferences collection failed", err)
                     }
-                }
+                    .collect { savedPrefs ->
+                        _accountPreferences.value = savedPrefs
+                        _isDarkTheme.value = savedPrefs.isDarkTheme
+                        _notifyOnComplete.value = savedPrefs.notifyOnComplete
+                        if (firstLoad) {
+                            _agentMode.value = savedPrefs.defaultAgentMode
+                            _chatTier.value = savedPrefs.defaultChatTier
+                            _chatbotRole.value = savedPrefs.defaultChatbotRole
+                            _searchGroundingEnabled.value = savedPrefs.defaultSearchGrounding
+                            firstLoad = false
+                        }
+                    }
             }
         }
     }
@@ -386,14 +397,22 @@ class AlSaherViewModel(
         viewModelScope.launch {
             _isSavingProfile.value = true
             _errorBanner.value = null
-            repository.updateUserProfileInfo(currentUserId, cleanName, email)
-                .onSuccess {
-                    _statusMessage.value = "تم تحديث بيانات الحساب بنجاح."
-                }
-                .onFailure { error ->
-                    _errorBanner.value = error.localizedMessage ?: "تعذر حفظ بيانات الحساب."
-                }
-            _isSavingProfile.value = false
+            try {
+                repository.updateUserProfileInfo(currentUserId, cleanName, email)
+                    .onSuccess {
+                        _statusMessage.value = "تم تحديث بيانات الحساب بنجاح."
+                    }
+                    .onFailure { error ->
+                        _errorBanner.value = error.localizedMessage ?: "تعذر حفظ بيانات الحساب."
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Profile save failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر حفظ بيانات الحساب."
+            } finally {
+                _isSavingProfile.value = false
+            }
         }
     }
 
@@ -717,7 +736,8 @@ class AlSaherViewModel(
                     "بناء المخرجات وتنسيق الملفات",
                     "المراجعة النهائية والتسليم"
                 )
-                val taskId = if (createdTaskId.isNullOrBlank()) {
+                val existingTaskId = createdTaskId
+                val taskId = if (existingTaskId.isNullOrBlank()) {
                     val taskRes = repository.createTask(
                         userId = currentUserId,
                         title = prompt.take(65),
@@ -733,8 +753,8 @@ class AlSaherViewModel(
                         _activeTaskId.value = it
                     }
                 } else {
-                    repository.updateTaskProgress(currentUserId, createdTaskId!!, "PLANNING", 0L)
-                    createdTaskId!!
+                    repository.updateTaskProgress(currentUserId, existingTaskId, "PLANNING", 0L)
+                    existingTaskId
                 }
                 repository.addMessage(currentUserId, taskId, "USER", prompt, AgentMode.AGENT.name)
 
@@ -825,8 +845,14 @@ class AlSaherViewModel(
         _streamingReply.value = null
         if (task != null) {
             viewModelScope.launch {
-                repository.updateTaskProgress(currentUserId, task.id, "STOPPED", task.currentStepIndex)
-                _statusMessage.value = "تم إيقاف المهمة بناءً على طلبك."
+                try {
+                    repository.updateTaskProgress(currentUserId, task.id, "STOPPED", task.currentStepIndex)
+                    _statusMessage.value = "تم إيقاف المهمة بناءً على طلبك."
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Stop task progress update failed", e)
+                }
             }
         }
     }
@@ -835,8 +861,14 @@ class AlSaherViewModel(
         val nextPaused = !_isPaused.value
         _isPaused.value = nextPaused
         viewModelScope.launch {
-            val nextStatus = if (nextPaused) "PAUSED" else "RUNNING"
-            repository.updateTaskProgress(currentUserId, task.id, nextStatus, task.currentStepIndex)
+            try {
+                val nextStatus = if (nextPaused) "PAUSED" else "RUNNING"
+                repository.updateTaskProgress(currentUserId, task.id, nextStatus, task.currentStepIndex)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Toggle pause update failed", e)
+            }
         }
     }
 
@@ -844,26 +876,40 @@ class AlSaherViewModel(
         if (updatedPrompt.isBlank()) return
         activeAgentJob?.cancel()
         viewModelScope.launch {
-            repository.updateTaskEdit(
-                userId = currentUserId,
-                taskId = task.id,
-                title = updatedPrompt.take(65),
-                prompt = updatedPrompt,
-                mode = AgentMode.AGENT.name,
-                status = "PLANNING",
-                stepTitles = task.stepTitles,
-                currentStepIndex = 0L
-            )
-            _activeTaskId.value = task.id
-            runGeneralAgent(updatedPrompt, appContext)
+            try {
+                repository.updateTaskEdit(
+                    userId = currentUserId,
+                    taskId = task.id,
+                    title = updatedPrompt.take(65),
+                    prompt = updatedPrompt,
+                    mode = AgentMode.AGENT.name,
+                    status = "PLANNING",
+                    stepTitles = task.stepTitles,
+                    currentStepIndex = 0L
+                )
+                _activeTaskId.value = task.id
+                runGeneralAgent(updatedPrompt, appContext)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Edit and rerun failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر إعادة تشغيل المهمة."
+            }
         }
     }
 
     fun deleteTask(taskId: String) {
         viewModelScope.launch {
-            repository.deleteTask(currentUserId, taskId)
-            if (_activeTaskId.value == taskId) {
-                _activeTaskId.value = null
+            try {
+                repository.deleteTask(currentUserId, taskId)
+                if (_activeTaskId.value == taskId) {
+                    _activeTaskId.value = null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Delete task failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر حذف المهمة."
             }
         }
     }
@@ -911,37 +957,44 @@ class AlSaherViewModel(
         val model = _videoTimeline.value ?: return
         val projectId = _activeVideoProjectId.value
         viewModelScope.launch {
-            val tracksDesc = model.clips.joinToString("\n") {
-                "• ${it.shotTitle} (${it.durationSeconds}ث): ${it.captionText}"
-            }
-            val content = "التعليق الصوتي:\n${model.voiceoverScript}\n\nالموسيقى: ${model.musicTrack}\nالمؤثرات: ${model.sfxNotes}"
-            if (projectId.isNullOrBlank()) {
-                repository.saveProject(
-                    userId = currentUserId,
-                    title = model.title,
-                    studioType = "VIDEO",
-                    subType = model.videoType,
-                    prompt = model.title,
-                    content = content,
-                    tracksSummary = tracksDesc,
-                    status = "READY"
-                ).onSuccess { newId ->
-                    _activeVideoProjectId.value = newId
-                    _statusMessage.value = "تم حفظ تعديلات الفيديو في السحابة."
+            try {
+                val tracksDesc = model.clips.joinToString("\n") {
+                    "• ${it.shotTitle} (${it.durationSeconds}ث): ${it.captionText}"
                 }
-            } else {
-                repository.updateProject(
-                    userId = currentUserId,
-                    projectId = projectId,
-                    title = model.title,
-                    subType = model.videoType,
-                    prompt = model.title,
-                    content = content,
-                    tracksSummary = tracksDesc,
-                    status = "READY"
-                ).onSuccess {
-                    _statusMessage.value = "تم تحديث مشروع الفيديو بنجاح."
+                val content = "التعليق الصوتي:\n${model.voiceoverScript}\n\nالموسيقى: ${model.musicTrack}\nالمؤثرات: ${model.sfxNotes}"
+                if (projectId.isNullOrBlank()) {
+                    repository.saveProject(
+                        userId = currentUserId,
+                        title = model.title,
+                        studioType = "VIDEO",
+                        subType = model.videoType,
+                        prompt = model.title,
+                        content = content,
+                        tracksSummary = tracksDesc,
+                        status = "READY"
+                    ).onSuccess { newId ->
+                        _activeVideoProjectId.value = newId
+                        _statusMessage.value = "تم حفظ تعديلات الفيديو في السحابة."
+                    }
+                } else {
+                    repository.updateProject(
+                        userId = currentUserId,
+                        projectId = projectId,
+                        title = model.title,
+                        subType = model.videoType,
+                        prompt = model.title,
+                        content = content,
+                        tracksSummary = tracksDesc,
+                        status = "READY"
+                    ).onSuccess {
+                        _statusMessage.value = "تم تحديث مشروع الفيديو بنجاح."
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Save video edits failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر حفظ تعديلات الفيديو."
             }
         }
     }
@@ -1138,13 +1191,20 @@ class AlSaherViewModel(
     // --- CONNECTORS ---
     fun setConnectorConnection(item: ConnectorCatalogItem, connected: Boolean, accountLabel: String) {
         viewModelScope.launch {
-            repository.setConnectorState(currentUserId, item, connected, accountLabel)
-                .onSuccess {
-                    _statusMessage.value = if (connected) "تم ربط ${item.name}" else "تم فصل ${item.name}"
-                }
-                .onFailure { e ->
-                    _errorBanner.value = e.localizedMessage ?: "تعذر تحديث الموصل"
-                }
+            try {
+                repository.setConnectorState(currentUserId, item, connected, accountLabel)
+                    .onSuccess {
+                        _statusMessage.value = if (connected) "تم ربط ${item.name}" else "تم فصل ${item.name}"
+                    }
+                    .onFailure { e ->
+                        _errorBanner.value = e.localizedMessage ?: "تعذر تحديث الموصل"
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Connector update failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر تحديث الموصل"
+            }
         }
     }
 
@@ -1182,50 +1242,83 @@ class AlSaherViewModel(
     fun createAutomation(title: String, triggerType: String, triggerDetail: String, actionPrompt: String) {
         if (title.isBlank() || actionPrompt.isBlank()) return
         viewModelScope.launch {
-            repository.createAutomation(currentUserId, title, triggerType, triggerDetail, actionPrompt)
-                .onSuccess { _statusMessage.value = "تم إنشاء الأتمتة بنجاح." }
-                .onFailure { _errorBanner.value = it.localizedMessage ?: "تعذر حفظ الأتمتة" }
+            try {
+                repository.createAutomation(currentUserId, title, triggerType, triggerDetail, actionPrompt)
+                    .onSuccess { _statusMessage.value = "تم إنشاء الأتمتة بنجاح." }
+                    .onFailure { _errorBanner.value = it.localizedMessage ?: "تعذر حفظ الأتمتة" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Create automation failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر حفظ الأتمتة"
+            }
         }
     }
 
     fun toggleAutomation(rule: AutomationRule) {
         viewModelScope.launch {
-            repository.toggleAutomation(currentUserId, rule.id, !rule.active)
+            try {
+                repository.toggleAutomation(currentUserId, rule.id, !rule.active)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Toggle automation failed", e)
+            }
         }
     }
 
     fun triggerAutomationNow(rule: AutomationRule, appContext: Context) {
         viewModelScope.launch {
-            repository.incrementAutomationRun(currentUserId, rule.id, rule.runsCount + 1L)
-            _destination.value = WorkspaceDestination.CHAT_AGENT
-            runGeneralAgent("تنفيذ أتمتة (${rule.title} - ${rule.triggerDetail}): ${rule.actionPrompt}", appContext)
+            try {
+                repository.incrementAutomationRun(currentUserId, rule.id, rule.runsCount + 1L)
+                _destination.value = WorkspaceDestination.CHAT_AGENT
+                runGeneralAgent("تنفيذ أتمتة (${rule.title} - ${rule.triggerDetail}): ${rule.actionPrompt}", appContext)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Trigger automation failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر تشغيل الأتمتة."
+            }
         }
     }
 
     fun deleteAutomation(ruleId: String) {
         viewModelScope.launch {
-            repository.deleteAutomation(currentUserId, ruleId)
+            try {
+                repository.deleteAutomation(currentUserId, ruleId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Delete automation failed", e)
+            }
         }
     }
 
     // --- PRICING ---
     fun selectPricingPlan(plan: String) {
         viewModelScope.launch {
-            val newBalance = when (plan) {
-                "PRO" -> 5000L
-                "TEAM" -> 15000L
-                else -> 1000L
-            }
-            repository.upgradePlan(currentUserId, plan, newBalance)
-                .onSuccess {
-                    _statusMessage.value = when (plan) {
-                        "PRO" -> "تمت الترقية إلى باقة Pro ($20/شهر) — 5000 رصيد!"
-                        "TEAM" -> "تمت الترقية إلى باقة Team ($49/شهر) — 15000 رصيد!"
-                        else -> "تم تفعيل الباقة المجانية (1000 رصيد)"
-                    }
-                    _showPricingSheet.value = false
+            try {
+                val newBalance = when (plan) {
+                    "PRO" -> 5000L
+                    "TEAM" -> 15000L
+                    else -> 1000L
                 }
-                .onFailure { _errorBanner.value = it.localizedMessage ?: "تعذر تحديث الباقة" }
+                repository.upgradePlan(currentUserId, plan, newBalance)
+                    .onSuccess {
+                        _statusMessage.value = when (plan) {
+                            "PRO" -> "تمت الترقية إلى باقة Pro ($20/شهر) — 5000 رصيد!"
+                            "TEAM" -> "تمت الترقية إلى باقة Team ($49/شهر) — 15000 رصيد!"
+                            else -> "تم تفعيل الباقة المجانية (1000 رصيد)"
+                        }
+                        _showPricingSheet.value = false
+                    }
+                    .onFailure { _errorBanner.value = it.localizedMessage ?: "تعذر تحديث الباقة" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Select pricing plan failed", e)
+                _errorBanner.value = e.localizedMessage ?: "تعذر تحديث الباقة"
+            }
         }
     }
 }

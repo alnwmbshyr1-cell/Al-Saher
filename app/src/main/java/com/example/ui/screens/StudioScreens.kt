@@ -252,9 +252,9 @@ fun VideoStudioScreen(
                 }
             }
 
-            if (attachedBitmap != null) {
+            attachedBitmap?.let { bmp ->
                 Image(
-                    bitmap = attachedBitmap!!.asImageBitmap(),
+                    bitmap = bmp.asImageBitmap(),
                     contentDescription = "صورة المنتج المرفقة",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -303,9 +303,10 @@ fun VideoStudioScreen(
                             .height(180.dp)
                             .clip(RoundedCornerShape(16.dp))
                     ) {
-                        if (attachedBitmap != null) {
+                        val previewBmp = attachedBitmap
+                        if (previewBmp != null) {
                             Image(
-                                bitmap = attachedBitmap!!.asImageBitmap(),
+                                bitmap = previewBmp.asImageBitmap(),
                                 contentDescription = "معاينة صورة الفيديو",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -632,9 +633,9 @@ fun SlidesStudioScreen(
                 }
             }
 
-            if (!exportMessage.isNullOrBlank()) {
+            exportMessage?.takeIf { it.isNotBlank() }?.let { msg ->
                 Text(
-                    text = exportMessage!!,
+                    text = msg,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )

@@ -70,7 +70,9 @@ import com.example.firebase.onGoogleSignInClicked
 fun AuthScreen(onAuthSuccess: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
+    val credentialManager = remember(context) {
+        runCatching { CredentialManager.create(context) }.getOrNull()
+    }
 
     var isLoading by remember { mutableStateOf(false) }
     var isCheckingAuto by remember { mutableStateOf(true) }
@@ -237,7 +239,7 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    if (!errorMessage.isNullOrBlank()) {
+                    errorMessage?.takeIf { it.isNotBlank() }?.let { err ->
                         Surface(
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f),
                             shape = RoundedCornerShape(12.dp),
@@ -246,7 +248,7 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                                 .padding(bottom = 12.dp)
                         ) {
                             Text(
-                                text = errorMessage!!,
+                                text = err,
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(12.dp)

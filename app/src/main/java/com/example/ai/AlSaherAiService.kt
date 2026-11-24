@@ -45,18 +45,6 @@ data class AgentPlanResult(
 
 class AlSaherAiService {
 
-    // FIX: موديلات حقيقية موجودة في Firebase AI Logic
-    private companion object {
-        const val MODEL_CHAT = "gemini-2.5-flash"
-        const val MODEL_AGENT = "gemini-2.5-flash"
-        const val MODEL_VIDEO = "gemini-2.5-flash"
-        const val MODEL_SLIDES = "gemini-2.5-flash"
-        const val MODEL_IMAGE = "gemini-2.0-flash-preview-image-generation"
-        const val MODEL_TRANSCRIBE = "gemini-2.5-flash"
-        const val MODEL_LIVE = "gemini-2.0-flash-live-001"
-        const val TAG = "AlSaherAi"
-    }
-
     private fun buildSystemInstruction(role: ChatbotRole) = content {
         text(role.systemRoleInstruction)
     }
@@ -71,8 +59,11 @@ class AlSaherAiService {
             if (enableSearchGrounding) add(Tool.googleSearch())
             if (enableMapsGrounding) add(Tool.googleMaps())
         }
-        // FIX: لا نستخدم tier.modelName لو كان موديل وهمي، نستخدم موديل حقيقي
-        val resolvedModelName = MODEL_CHAT
+        val resolvedModelName = if (enableSearchGrounding || enableMapsGrounding) {
+            GeminiChatTier.GENERAL.modelName
+        } else {
+            tier.modelName
+        }
         return Firebase.ai.generativeModel(
             modelName = resolvedModelName,
             systemInstruction = buildSystemInstruction(role),
@@ -107,7 +98,7 @@ class AlSaherAiService {
 
     private val agentModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = MODEL_AGENT,
+            modelName = "gemini-4-neon",
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = agentSchema
@@ -136,7 +127,7 @@ class AlSaherAiService {
 
     private val videoModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = MODEL_VIDEO,
+            modelName = "gemini-4-hydrogen",
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = videoSchema
@@ -162,7 +153,7 @@ class AlSaherAiService {
 
     private val slidesModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = MODEL_SLIDES,
+            modelName = "gemini-4-hydrogen",
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = slidesSchema
@@ -178,120 +169,120 @@ class AlSaherAiService {
         enableSearchGrounding: Boolean = false,
         enableMapsGrounding: Boolean = false
     ): Flow<String> = flow {
-        try {
-            val model = getChatModel(tier, role, enableSearchGrounding, enableMapsGrounding)
-            val mergedHistory = mutableListOf<Pair<String, String>>()
-            historyContext.takeLast(12).forEach { (msgRole, text) ->
-                val clean = text.trim()
-                if (clean.isEmpty()) return@forEach
-                val geminiRole = if (msgRole == "USER") "user" else "model"
-                if (mergedHistory.isEmpty() && geminiRole != "user") return@forEach
-                if (mergedHistory.lastOrNull()?.first == geminiRole) {
-                    val prev = mergedHistory.removeAt(mergedHistory.lastIndex)
-                    mergedHistory.add(geminiRole to "${prev.second}\n$clean")
-                } else {
-                    mergedHistory.add(geminiRole to clean)
+        val model = getChatModel(tier, role, enableSearchGrounding, enableMapsGrounding)
+        val mergedHistory = mutableListOf<Pair<String, String>>()
+        historyContext.takeLast(12).forEach { (msgRole, text) ->
+            val clean = text.trim()
+            if (clean.isEmpty()) return@forEach
+            val geminiRole = if (msgRole == "USER") "user" else "model"
+            if (mergedHistory.isEmpty() && geminiRole != "user") return@forEach
+            if (mergedHistory.lastOrNull()?.first == geminiRole) {
+                val prev = mergedHistory.removeAt(mergedHistory.lastIndex)
+                mergedHistory.add(geminiRole to "${prev.second}\n$clean")
+            } else {
+                mergedHistory.add(geminiRole to clean)
+            }
+        }
+        if (mergedHistory.lastOrNull()?.first == "user") {
+            mergedHistory.removeAt(mergedHistory.lastIndex)
+        }
+        val chatHistory = mergedHistory.map { (geminiRole, text) ->
+            content(geminiRole) { text(text) }
+        }
+        val chat = model.startChat(history = chatHistory)
+        val sb = StringBuilder()
+        val searchCitations = linkedSetOf<String>()
+        val mapsCitations = linkedSetOf<String>()
+        withTimeout(60_000L) {
+            chat.sendMessageStream(prompt).collect { chunk ->
+                val chunkText = chunk.text.orEmpty()
+                if (chunkText.isNotEmpty()) {
+                    sb.append(chunkText)
+                    emit(sb.toString())
                 }
-            }
-            if (mergedHistory.lastOrNull()?.first == "user") {
-                mergedHistory.removeAt(mergedHistory.lastIndex)
-            }
-            val chatHistory = mergedHistory.map { (geminiRole, text) ->
-                content(geminiRole) { text(text) }
-            }
-            val chat = model.startChat(history = chatHistory)
-            val sb = StringBuilder()
-            val searchCitations = linkedSetOf<String>()
-            val mapsCitations = linkedSetOf<String>()
-            withTimeout(60_000L) {
-                chat.sendMessageStream(prompt).collect { chunk ->
-                    val chunkText = chunk.text.orEmpty()
-                    if (chunkText.isNotEmpty()) {
-                        sb.append(chunkText)
-                        emit(sb.toString())
-                    }
-                    chunk.candidates.firstOrNull()?.groundingMetadata?.groundingChunks?.forEach { gChunk ->
-                        val web = gChunk.web
-                        if (web != null) {
-                            val title = web.title?.takeIf { it.isNotBlank() } ?: web.domain.orEmpty()
-                            val uri = web.uri.orEmpty()
-                            if (title.isNotBlank() && uri.isNotBlank()) {
-                                searchCitations.add("• $title ($uri)")
-                            }
-                        }
-                        val maps = gChunk.maps
-                        if (maps != null) {
-                            val title = maps.title?.takeIf { it.isNotBlank() } ?: "موقع على خرائط Google"
-                            val uri = maps.uri.orEmpty()
-                            if (uri.isNotBlank()) mapsCitations.add("• $title ($uri)")
-                            else mapsCitations.add("• $title")
+                chunk.candidates.firstOrNull()?.groundingMetadata?.groundingChunks?.forEach { gChunk ->
+                    val web = gChunk.web
+                    if (web != null) {
+                        val title = web.title?.takeIf { it.isNotBlank() } ?: web.domain.orEmpty()
+                        val uri = web.uri.orEmpty()
+                        if (title.isNotBlank() && uri.isNotBlank()) {
+                            searchCitations.add("• $title ($uri)")
                         }
                     }
+                    val maps = gChunk.maps
+                    if (maps != null) {
+                        val title = maps.title?.takeIf { it.isNotBlank() } ?: "موقع على خرائط Google"
+                        val uri = maps.uri.orEmpty()
+                        if (uri.isNotBlank()) {
+                            mapsCitations.add("• $title ($uri)")
+                        } else {
+                            mapsCitations.add("• $title")
+                        }
+                    }
                 }
             }
-            if (searchCitations.isNotEmpty()) {
-                sb.append("\n\n🔎 مصادر بحث Google:\n")
-                searchCitations.take(4).forEach { sb.append(it).append("\n") }
-            }
-            if (mapsCitations.isNotEmpty()) {
-                sb.append("\n\n📍 مواقع خرائط Google:\n")
-                mapsCitations.take(4).forEach { sb.append(it).append("\n") }
-            }
-            if (searchCitations.isNotEmpty() || mapsCitations.isNotEmpty()) {
-                emit(sb.toString().trimEnd())
-            }
-            if (sb.isBlank()) {
-                emit("عذراً، لم أستطع توليد رد الآن. حاول مرة أخرى.")
-            }
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
-            Log.e(TAG, "streamFreeChat failed", e)
-            emit("حدث خطأ في الاتصال بالذكاء الاصطناعي: ${e.localizedMessage ?: "حاول مرة أخرى"}")
+        }
+        if (searchCitations.isNotEmpty()) {
+            sb.append("\n\n🔎 مصادر بحث Google:\n")
+            searchCitations.take(4).forEach { sb.append(it).append("\n") }
+        }
+        if (mapsCitations.isNotEmpty()) {
+            sb.append("\n\n📍 مواقع خرائط Google:\n")
+            mapsCitations.take(4).forEach { sb.append(it).append("\n") }
+        }
+        if (searchCitations.isNotEmpty() || mapsCitations.isNotEmpty()) {
+            emit(sb.toString().trimEnd())
+        }
+        if (sb.isBlank()) {
+            throw IllegalStateException("أعاد النموذج استجابة فارغة.")
         }
     }
 
     suspend fun planAndExecuteAgentTask(prompt: String, connectedApps: List<String>): AgentPlanResult {
-        return try {
-            val connectorsText = if (connectedApps.isEmpty()) "لا توجد موصلات متصلة حالياً"
-            else connectedApps.joinToString("، ")
-            val fullPrompt = """
-                أنت الوكيل الذكي العام (الساحر). لديك حاسوب سحابي لتنفيذ المهام وتقديم مخرجات كاملة جاهزة للاستخدام.
-                الموصلات المتصلة حالياً: $connectorsText
-                طلب المستخدم: $prompt
-                أنشئ خطة عمل متدرجة (4 إلى 6 خطوات) ثم قدّم ملخصاً ومخرجاً نهائياً عملياً ومتكاملاً باللغة العربية.
-            """.trimIndent()
-            val response = withTimeout(60_000L) { agentModel.generateContent(fullPrompt) }
-            val raw = response.text ?: throw IllegalStateException("لم يُرجع الوكيل أي بيانات.")
-            // FIX: لو رجع نص مو JSON، لا نطفي، نرجع نتيجة افتراضية
-            val json = try { JSONObject(raw) } catch (e: Exception) {
-                JSONObject().put("title", prompt.take(50)).put("summary", raw.take(2000))
-            }
-            val stepsArr = json.optJSONArray("steps")
-            val steps = if (stepsArr != null) {
-                (0 until stepsArr.length()).map { stepsArr.getString(it) }
-            } else emptyList()
-            AgentPlanResult(
-                title = json.optString("title", prompt.take(50)),
-                category = json.optString("category", "GENERAL"),
-                steps = steps.ifEmpty {
-                    listOf("تحليل الطلب", "البحث وجمع المعطيات", "بناء المخرج النهائي", "المراجعة والتسليم")
-                }.take(10),
-                summary = json.optString("summary", ""),
-                deliverableTitle = json.optString("deliverableTitle", "النتيجة النهائية"),
-                deliverableContent = json.optString("deliverableContent", raw.take(4000))
-            )
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
-            Log.e(TAG, "planAndExecuteAgentTask failed", e)
-            AgentPlanResult(
-                title = prompt.take(50),
+        val connectorsText = if (connectedApps.isEmpty()) "لا توجد موصلات متصلة حالياً"
+        else connectedApps.joinToString("، ")
+
+        val fullPrompt = """
+            أنت الوكيل الذكي العام (الساحر). لديك حاسوب سحابي لتنفيذ المهام وتقديم مخرجات كاملة جاهزة للاستخدام.
+            الموصلات المتصلة حالياً: $connectorsText
+            طلب المستخدم: $prompt
+
+            أنشئ خطة عمل متدرجة (4 إلى 6 خطوات) ثم قدّم ملخصاً ومخرجاً نهائياً عملياً ومتكاملاً باللغة العربية.
+        """.trimIndent()
+
+        val response = withTimeout(60_000L) {
+            agentModel.generateContent(fullPrompt)
+        }
+        val raw = response.text ?: throw IllegalStateException("لم يُرجع الوكيل أي بيانات.")
+        val json = try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            return AgentPlanResult(
+                title = prompt.take(50).ifBlank { "مهمة الساحر" },
                 category = "GENERAL",
                 steps = listOf("تحليل الطلب", "البحث وجمع المعطيات", "بناء المخرج النهائي", "المراجعة والتسليم"),
-                summary = "تعذر الاتصال بالذكاء الاصطناعي: ${e.localizedMessage}",
+                summary = raw.take(400),
                 deliverableTitle = "النتيجة النهائية",
-                deliverableContent = "حاول مرة أخرى لاحقاً."
+                deliverableContent = raw
             )
         }
+        val stepsArr = json.optJSONArray("steps")
+        val parsedSteps = if (stepsArr != null) {
+            (0 until stepsArr.length()).mapNotNull { idx -> stepsArr.optString(idx)?.takeIf { it.isNotBlank() } }
+        } else {
+            emptyList()
+        }
+        val steps = parsedSteps.ifEmpty {
+            listOf("تحليل الطلب", "البحث وجمع المعطيات", "بناء المخرج النهائي", "المراجعة والتسليم")
+        }
+        return AgentPlanResult(
+            title = json.optString("title", prompt.take(50)),
+            category = json.optString("category", "GENERAL"),
+            steps = steps.take(10),
+            summary = json.optString("summary", ""),
+            deliverableTitle = json.optString("deliverableTitle", "النتيجة النهائية"),
+            deliverableContent = json.optString("deliverableContent", "")
+        )
     }
 
     suspend fun generateVideoProject(
@@ -300,88 +291,110 @@ class AlSaherAiService {
         creationMode: String,
         attachedImage: Bitmap?
     ): VideoTimelineModel {
-        return try {
-            val textPrompt = """
-                أنشئ مشروع فيديو قابل للتعديل باللغة العربية.
-                النمط: $creationMode
-                نوع الفيديو: $videoType
-                الوصف: $prompt
-                أخرج 4 إلى 5 لقطات متتالية مع نص التعليق الصوتي والموسيقى والمؤثرات الصوتية والترجمة لكل لقطة.
-            """.trimIndent()
-            val response = withTimeout(60_000L) {
-                if (attachedImage != null) {
-                    videoModel.generateContent(content { image(attachedImage); text(textPrompt) })
-                } else {
-                    videoModel.generateContent(textPrompt)
-                }
+        val textPrompt = """
+            أنشئ مشروع فيديو قابل للتعديل باللغة العربية.
+            النمط: $creationMode
+            نوع الفيديو: $videoType
+            الوصف: $prompt
+            أخرج 4 إلى 5 لقطات متتالية مع نص التعليق الصوتي والموسيقى والمؤثرات الصوتية والترجمة لكل لقطة.
+        """.trimIndent()
+
+        val response = withTimeout(60_000L) {
+            if (attachedImage != null) {
+                videoModel.generateContent(
+                    content {
+                        image(attachedImage)
+                        text(textPrompt)
+                    }
+                )
+            } else {
+                videoModel.generateContent(textPrompt)
             }
-            val raw = response.text ?: throw IllegalStateException("تعذر توليد مشروع الفيديو.")
-            val json = JSONObject(raw)
-            val clipsArr = json.optJSONArray("clips")
-            val clips = if (clipsArr != null) {
-                (0 until clipsArr.length()).map { i ->
-                    val obj = clipsArr.getJSONObject(i)
-                    VideoTimelineClip(
-                        id = "clip_${i + 1}",
-                        shotTitle = obj.optString("shotTitle", "لقطة ${i + 1}"),
-                        visualPrompt = obj.optString("visualPrompt", ""),
-                        durationSeconds = obj.optInt("durationSeconds", 5).coerceIn(2, 20),
-                        captionText = obj.optString("captionText", "")
-                    )
-                }
-            } else emptyList()
-            VideoTimelineModel(
-                title = json.optString("title", "مشروع فيديو جديد"),
+        }
+        val raw = response.text ?: throw IllegalStateException("تعذر توليد مشروع الفيديو.")
+        val json = try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            return VideoTimelineModel(
+                title = prompt.take(40).ifBlank { "مشروع فيديو جديد" },
                 videoType = videoType,
-                voiceoverScript = json.optString("voiceoverScript", ""),
-                musicTrack = json.optString("musicTrack", "موسيقى سينمائية عصرية"),
-                sfxNotes = json.optString("sfxNotes", "انتقالات صوتية ناعمة"),
-                clips = clips.ifEmpty { listOf(VideoTimelineClip("clip_1", "لقطة افتتاحية", prompt, 5, "")) }
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "generateVideoProject failed", e)
-            VideoTimelineModel(
-                title = "مشروع فيديو جديد",
-                videoType = videoType,
-                voiceoverScript = prompt,
+                voiceoverScript = raw,
                 musicTrack = "موسيقى سينمائية عصرية",
                 sfxNotes = "انتقالات صوتية ناعمة",
-                clips = listOf(VideoTimelineClip("clip_1", "لقطة افتتاحية", prompt, 5, ""))
+                clips = listOf(
+                    VideoTimelineClip("clip_1", "المشهد الافتتاحي", prompt, 5, prompt.take(60))
+                )
             )
         }
+        val clipsArr = json.optJSONArray("clips")
+        val clips = if (clipsArr != null) {
+            (0 until clipsArr.length()).mapNotNull { i ->
+                val obj = clipsArr.optJSONObject(i) ?: return@mapNotNull null
+                VideoTimelineClip(
+                    id = "clip_${i + 1}",
+                    shotTitle = obj.optString("shotTitle", "لقطة ${i + 1}"),
+                    visualPrompt = obj.optString("visualPrompt", ""),
+                    durationSeconds = obj.optInt("durationSeconds", 5).coerceIn(2, 20),
+                    captionText = obj.optString("captionText", "")
+                )
+            }
+        } else {
+            emptyList()
+        }
+        return VideoTimelineModel(
+            title = json.optString("title", "مشروع فيديو جديد"),
+            videoType = videoType,
+            voiceoverScript = json.optString("voiceoverScript", ""),
+            musicTrack = json.optString("musicTrack", "موسيقى سينمائية عصرية"),
+            sfxNotes = json.optString("sfxNotes", "انتقالات صوتية ناعمة"),
+            clips = clips
+        )
     }
 
     suspend fun generateSlideDeck(prompt: String, deckType: String): Pair<String, List<SlideCardModel>> {
-        return try {
-            val fullPrompt = """
-                أنشئ عرضاً تقديمياً احترافياً متكاملاً باللغة العربية.
-                نوع العرض: $deckType
-                الموضوع: $prompt
-                أخرج 5 إلى 7 شرائح مرتبة مع نقاط واضحة وملاحظات للمقدم.
-            """.trimIndent()
-            val response = withTimeout(60_000L) { slidesModel.generateContent(fullPrompt) }
-            val raw = response.text ?: throw IllegalStateException("تعذر توليد العرض التقديمي.")
-            val json = JSONObject(raw)
-            val deckTitle = json.optString("deckTitle", "عرض تقديمي")
-            val arr = json.optJSONArray("slides")
-            val slides = if (arr != null) {
-                (0 until arr.length()).map { i ->
-                    val s = arr.getJSONObject(i)
-                    val bArr = s.optJSONArray("bullets")
-                    val bullets = if (bArr != null) (0 until bArr.length()).map { bIdx -> bArr.getString(bIdx) } else emptyList()
-                    SlideCardModel(
-                        number = s.optInt("number", i + 1),
-                        title = s.optString("title", "شريحة ${i + 1}"),
-                        bullets = bullets,
-                        speakerNotes = s.optString("speakerNotes", "")
-                    )
-                }
-            } else emptyList()
-            deckTitle to slides.ifEmpty { listOf(SlideCardModel(1, prompt.take(60), listOf(prompt), "")) }
-        } catch (e: Exception) {
-            Log.e(TAG, "generateSlideDeck failed", e)
-            "عرض تقديمي" to listOf(SlideCardModel(1, prompt.take(60), listOf(prompt), ""))
+        val fullPrompt = """
+            أنشئ عرضاً تقديمياً احترافياً متكاملاً باللغة العربية.
+            نوع العرض: $deckType
+            الموضوع: $prompt
+            أخرج 5 إلى 7 شرائح مرتبة مع نقاط واضحة وملاحظات للمقدم.
+        """.trimIndent()
+
+        val response = withTimeout(60_000L) {
+            slidesModel.generateContent(fullPrompt)
         }
+        val raw = response.text ?: throw IllegalStateException("تعذر توليد العرض التقديمي.")
+        val json = try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            return "عرض تقديمي" to listOf(
+                SlideCardModel(
+                    number = 1,
+                    title = prompt.take(40).ifBlank { "الملخص" },
+                    bullets = raw.lines().filter { it.isNotBlank() }.take(5),
+                    speakerNotes = ""
+                )
+            )
+        }
+        val deckTitle = json.optString("deckTitle", "عرض تقديمي")
+        val arr = json.optJSONArray("slides")
+        val slides = if (arr != null) {
+            (0 until arr.length()).mapNotNull { i ->
+                val s = arr.optJSONObject(i) ?: return@mapNotNull null
+                val bArr = s.optJSONArray("bullets")
+                val bullets = if (bArr != null) {
+                    (0 until bArr.length()).mapNotNull { bIdx -> bArr.optString(bIdx)?.takeIf { it.isNotBlank() } }
+                } else emptyList()
+                SlideCardModel(
+                    number = s.optInt("number", i + 1),
+                    title = s.optString("title", "شريحة ${i + 1}"),
+                    bullets = bullets,
+                    speakerNotes = s.optString("speakerNotes", "")
+                )
+            }
+        } else {
+            emptyList()
+        }
+        return deckTitle to slides
     }
 
     suspend fun runWideResearch(topic: String): List<WideResearchAgentOutput> = coroutineScope {
@@ -402,9 +415,10 @@ class AlSaherAiService {
                             focusArea = agentPrompt.substringBefore(":"),
                             findings = res.text ?: "لا توجد نتائج"
                         )
-                    } catch (e: CancellationException) { throw e }
-                    catch (e: Exception) {
-                        Log.e(TAG, "WideResearch sub-agent failed: $agentName", e)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e("AlSaherAi", "WideResearch sub-agent failed: $agentName", e)
                         WideResearchAgentOutput(
                             agentName = agentName,
                             focusArea = "خطأ جزئي",
@@ -417,13 +431,10 @@ class AlSaherAiService {
     }
 
     suspend fun generateStudioArtifact(studioInstruction: String): String {
-        return try {
-            val response = withTimeout(60_000L) { chatModel.generateContent(studioInstruction) }
-            response.text ?: "لم يرجع النموذج محتوى."
-        } catch (e: Exception) {
-            Log.e(TAG, "generateStudioArtifact failed", e)
-            "تعذر توليد المحتوى: ${e.localizedMessage}"
+        val response = withTimeout(60_000L) {
+            chatModel.generateContent(studioInstruction)
         }
+        return response.text ?: throw IllegalStateException("لم يرجع النموذج محتوى.")
     }
 
     suspend fun generateOrEditImage(
@@ -437,7 +448,7 @@ class AlSaherAiService {
             ImageAspectOption.PORTRAIT_9X16 -> AspectRatio.PORTRAIT_9x16
         }
         val imageModel = Firebase.ai.generativeModel(
-            modelName = MODEL_IMAGE,
+            modelName = "gemini-nano-banana-2.1",
             generationConfig = generationConfig {
                 responseModalities = listOf(ResponseModality.IMAGE)
                 imageConfig = ImageConfig.builder()
@@ -448,7 +459,12 @@ class AlSaherAiService {
         )
         val response = withTimeout(60_000L) {
             if (inputBitmap != null) {
-                imageModel.generateContent(content { image(inputBitmap); text(prompt) })
+                imageModel.generateContent(
+                    content {
+                        image(inputBitmap)
+                        text(prompt)
+                    }
+                )
             } else {
                 imageModel.generateContent(prompt)
             }
@@ -461,33 +477,28 @@ class AlSaherAiService {
     }
 
     private val transcribeModel by lazy {
-        Firebase.ai.generativeModel(modelName = MODEL_TRANSCRIBE)
+        Firebase.ai.generativeModel(modelName = "gemini-3.5-transcribe")
     }
 
     suspend fun transcribeAudioBytes(audioBytes: ByteArray, mimeType: String = "audio/mp4"): String {
         require(audioBytes.isNotEmpty()) { "التسجيل الصوتي فارغ." }
         require(audioBytes.size <= 19 * 1024 * 1024) { "حجم التسجيل يتجاوز الحد المسموح (20 ميجابايت)." }
-        return try {
-            val response = withTimeout(60_000L) {
-                transcribeModel.generateContent(
-                    content {
-                        inlineData(audioBytes, mimeType)
-                        text("فرّغ هذا التسجيل الصوتي إلى نص دقيق بنفس اللغة المنطوقة دون تلخيص أو إضافات.")
-                    }
-                )
-            }
-            response.text?.trim()?.takeIf { it.isNotEmpty() }
-                ?: "لم يرجع نموذج التفريغ الصوتي أي نص."
-        } catch (e: Exception) {
-            Log.e(TAG, "transcribe failed", e)
-            "تعذر تفريغ الصوت: ${e.localizedMessage}"
+        val response = withTimeout(60_000L) {
+            transcribeModel.generateContent(
+                content {
+                    inlineData(audioBytes, mimeType)
+                    text("فرّغ هذا التسجيل الصوتي إلى نص دقيق بنفس اللغة المنطوقة دون تلخيص أو إضافات.")
+                }
+            )
         }
+        return response.text?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw IllegalStateException("لم يرجع نموذج التفريغ الصوتي أي نص.")
     }
 
     @OptIn(PublicPreviewAPI::class)
     suspend fun connectLiveVoiceSession(role: ChatbotRole): LiveSession {
         val liveModel = Firebase.ai.liveModel(
-            modelName = MODEL_LIVE,
+            modelName = "gemini-3.8-live",
             generationConfig = liveGenerationConfig {
                 responseModality = ResponseModality.AUDIO
                 inputAudioTranscription = AudioTranscriptionConfig()
@@ -495,6 +506,8 @@ class AlSaherAiService {
             },
             systemInstruction = buildSystemInstruction(role)
         )
-        return withTimeout(30_000L) { liveModel.connect() }
+        return withTimeout(30_000L) {
+            liveModel.connect()
+        }
     }
 }

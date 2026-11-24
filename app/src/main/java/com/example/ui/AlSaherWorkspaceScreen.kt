@@ -105,7 +105,9 @@ fun AlSaherWorkspaceScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
+    val credentialManager = remember(context) {
+        runCatching { CredentialManager.create(context) }.getOrNull()
+    }
 
     val destination by viewModel.destination.collectAsStateWithLifecycle()
     val agentMode by viewModel.agentMode.collectAsStateWithLifecycle()

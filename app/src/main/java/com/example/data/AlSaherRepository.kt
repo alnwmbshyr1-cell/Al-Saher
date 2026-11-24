@@ -30,17 +30,22 @@ import kotlinx.coroutines.tasks.await
 
 class AlSaherRepository(
     private val db: FirebaseFirestore,
-    private val auth: FirebaseAuth = Firebase.auth
+    private val auth: FirebaseAuth? = try {
+        Firebase.auth
+    } catch (_: Throwable) {
+        null
+    }
 ) {
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
+        db = resolveRepositoryFirestore(context)
     )
 
     private fun requireUserId(): String {
-        return auth.currentUser?.uid
-            ?: throw IllegalStateException("يجب تسجيل الدخول بحساب Google أولاً.")
+        val uid = auth?.currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            throw IllegalStateException("يجب تسجيل الدخول بحساب Google أولاً.")
+        }
+        return uid
     }
 
     // --- USER PROFILE & CREDITS ---
@@ -61,7 +66,7 @@ class AlSaherRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val toLog = firestoreError ?: (error as? Exception)
-                    if (toLog != null && auth.currentUser?.uid == userId) {
+                    if (toLog != null && auth?.currentUser?.uid == userId) {
                         handleFirestoreError(toLog, OperationType.GET, path)
                     }
                     throw error
@@ -188,7 +193,7 @@ class AlSaherRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val toLog = firestoreError ?: (error as? Exception)
-                    if (toLog != null && auth.currentUser?.uid == userId) {
+                    if (toLog != null && auth?.currentUser?.uid == userId) {
                         handleFirestoreError(toLog, OperationType.LIST, path)
                     }
                     throw error
@@ -215,7 +220,7 @@ class AlSaherRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val toLog = firestoreError ?: (error as? Exception)
-                    if (toLog != null && auth.currentUser?.uid == userId) {
+                    if (toLog != null && auth?.currentUser?.uid == userId) {
                         handleFirestoreError(toLog, OperationType.LIST, path)
                     }
                     throw error
@@ -458,7 +463,7 @@ class AlSaherRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val toLog = firestoreError ?: (error as? Exception)
-                    if (toLog != null && auth.currentUser?.uid == userId) {
+                    if (toLog != null && auth?.currentUser?.uid == userId) {
                         handleFirestoreError(toLog, OperationType.LIST, path)
                     }
                     throw error
@@ -559,7 +564,7 @@ class AlSaherRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val toLog = firestoreError ?: (error as? Exception)
-                    if (toLog != null && auth.currentUser?.uid == userId) {
+                    if (toLog != null && auth?.currentUser?.uid == userId) {
                         handleFirestoreError(toLog, OperationType.LIST, path)
                     }
                     throw error
@@ -678,7 +683,7 @@ class AlSaherRepository(
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val toLog = firestoreError ?: (error as? Exception)
-                    if (toLog != null && auth.currentUser?.uid == userId) {
+                    if (toLog != null && auth?.currentUser?.uid == userId) {
                         handleFirestoreError(toLog, OperationType.LIST, path)
                     }
                     throw error
@@ -725,6 +730,21 @@ class AlSaherRepository(
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, docPath)
             Result.failure(e)
+        }
+    }
+
+    companion object {
+        private fun resolveRepositoryFirestore(context: Context): FirebaseFirestore {
+            return try {
+                val dbId = context.applicationContext.getString(R.string.firestore_database_id).trim()
+                if (dbId.isNotEmpty()) {
+                    FirebaseFirestore.getInstance(dbId)
+                } else {
+                    FirebaseFirestore.getInstance()
+                }
+            } catch (_: Throwable) {
+                FirebaseFirestore.getInstance()
+            }
         }
     }
 }

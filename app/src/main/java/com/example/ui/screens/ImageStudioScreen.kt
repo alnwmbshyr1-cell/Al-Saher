@@ -240,14 +240,17 @@ fun ImageStudioScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Image(
-                                bitmap = referenceBitmap!!.asImageBitmap(),
-                                contentDescription = "الصورة المرجعية للتعديل",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                            )
+                            val previewBitmap = referenceBitmap
+                            if (previewBitmap != null) {
+                                Image(
+                                    bitmap = previewBitmap.asImageBitmap(),
+                                    contentDescription = "الصورة المرجعية للتعديل",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                )
+                            }
                             Text(
                                 text = "صورة مرفقة جاهزة للتعديل",
                                 style = MaterialTheme.typography.labelMedium,
@@ -370,9 +373,9 @@ fun ImageStudioScreen(
                                         Text("حفظ في المعرض")
                                     }
                                 }
-                                if (!exportMessage.isNullOrBlank()) {
+                                exportMessage?.takeIf { it.isNotBlank() }?.let { msg ->
                                     Text(
-                                        text = exportMessage!!,
+                                        text = msg,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )

@@ -217,16 +217,16 @@ class ChatViewModel : ViewModel() {
         activeStreamJob?.cancel()
         activeStreamJob = viewModelScope.launch {
             val stateSnapshot = _uiState.value
-            val model = resolveModel(
-                option = stateSnapshot.selectedModel,
-                enableGoogleSearch = stateSnapshot.googleSearchEnabled
-            )
-            val chatHistory = buildGeminiChatHistory(historyMessages)
-            val chat = model.startChat(history = chatHistory)
             val accumulatedText = StringBuilder()
             val sources = linkedSetOf<String>()
 
             try {
+                val model = resolveModel(
+                    option = stateSnapshot.selectedModel,
+                    enableGoogleSearch = stateSnapshot.googleSearchEnabled
+                )
+                val chatHistory = buildGeminiChatHistory(historyMessages)
+                val chat = model.startChat(history = chatHistory)
                 withTimeout(CHAT_TIMEOUT_MS) {
                     val userContent = content("user") {
                         if (attachment != null) {

@@ -32,60 +32,95 @@ fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     val listener = FirebaseAuth.AuthStateListener { auth ->
         trySend(auth.currentUser)
     }
-    addAuthStateListener(listener)
-    awaitClose { removeAuthStateListener(listener) }
+    try {
+        addAuthStateListener(listener)
+    } catch (t: Throwable) {
+        Log.e("Auth", "Failed to register AuthStateListener", t)
+        trySend(null)
+    }
+    awaitClose {
+        try {
+            removeAuthStateListener(listener)
+        } catch (t: Throwable) {
+            Log.w("Auth", "Failed to remove AuthStateListener", t)
+        }
+    }
 }
 
 fun attemptAutoSignIn(
     context: Context,
-    credentialManager: CredentialManager,
+    credentialManager: CredentialManager?,
     onAuthSuccess: () -> Unit,
     onUnauthenticated: () -> Unit,
     scope: CoroutineScope
 ) {
-    if (Firebase.auth.currentUser != null) {
-        onAuthSuccess()
-        return
-    }
-    val clientId = resolveDefaultWebClientId(context)
-    if (clientId.isEmpty()) {
-        onUnauthenticated()
-        return
-    }
-    val googleIdOption = GetGoogleIdOption.Builder()
-        .setFilterByAuthorizedAccounts(true)
-        .setServerClientId(clientId)
-        .setAutoSelectEnabled(true)
-        .build()
-    val request = GetCredentialRequest.Builder()
-        .addCredentialOption(googleIdOption)
-        .build()
-    scope.launch {
-        try {
-            val cred = withTimeoutOrNull(3500L) {
-                credentialManager.getCredential(context, request).credential
-            }
-            if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
-                Firebase.auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
-                onAuthSuccess()
-            } else {
+    try {
+        val auth = try {
+            Firebase.auth
+        } catch (_: Throwable) {
+            null
+        }
+        if (auth?.currentUser != null) {
+            onAuthSuccess()
+            return
+        }
+        if (credentialManager == null || auth == null) {
+            onUnauthenticated()
+            return
+        }
+        val clientId = resolveDefaultWebClientId(context)
+        if (clientId.isEmpty()) {
+            onUnauthenticated()
+            return
+        }
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(true)
+            .setServerClientId(clientId)
+            .setAutoSelectEnabled(true)
+            .build()
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+        scope.launch {
+            try {
+                val cred = withTimeoutOrNull(3500L) {
+                    credentialManager.getCredential(context, request).credential
+                }
+                if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
+                    auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
+                    onAuthSuccess()
+                } else {
+                    onUnauthenticated()
+                }
+            } catch (_: Throwable) {
                 onUnauthenticated()
             }
-        } catch (_: Exception) {
-            onUnauthenticated()
         }
+    } catch (_: Throwable) {
+        onUnauthenticated()
     }
 }
 
 fun onGoogleSignInClicked(
     context: Context,
-    credentialManager: CredentialManager,
+    credentialManager: CredentialManager?,
     onAuthSuccess: () -> Unit,
     onAuthError: (String) -> Unit,
     scope: CoroutineScope,
     onAuthCancelled: () -> Unit = {}
 ) {
+    val auth = try {
+        Firebase.auth
+    } catch (t: Throwable) {
+        Log.e("Auth", "FirebaseAuth unavailable on sign-in", t)
+        onAuthError("تعذر تهيئة خدمة المصادقة.")
+        return
+    }
+    if (credentialManager == null) {
+        onAuthError("خدمة Credential Manager غير متاحة على هذا الجهاز.")
+        return
+    }
     val clientId = resolveDefaultWebClientId(context)
     if (clientId.isEmpty()) {
         onAuthError("تعذر العثور على إعدادات تسجيل الدخول بحساب Google.")
@@ -98,11 +133,14 @@ fun onGoogleSignInClicked(
     scope.launch {
         try {
             val activityContext = context as? Activity
-                ?: throw IllegalStateException("يتطلب تسجيل الدخول سياق Activity صالح")
+            if (activityContext == null) {
+                onAuthError("يتطلب تسجيل الدخول سياق Activity صالح")
+                return@launch
+            }
             val cred = credentialManager.getCredential(activityContext, request).credential
             if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
-                Firebase.auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
+                auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
                 onAuthSuccess()
             } else {
                 onAuthError("نوع بيانات اعتماد غير متوقع")
@@ -110,26 +148,30 @@ fun onGoogleSignInClicked(
         } catch (e: GetCredentialCancellationException) {
             Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
             onAuthCancelled()
-        } catch (e: Exception) {
-            Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "تعذر تسجيل الدخول عبر Google")
+        } catch (t: Throwable) {
+            Log.e("Auth", "Google Sign-In failed", t)
+            onAuthError(t.localizedMessage ?: "تعذر تسجيل الدخول عبر Google")
         }
     }
 }
 
 fun signOutUser(
-    credentialManager: CredentialManager,
+    credentialManager: CredentialManager?,
     scope: CoroutineScope,
     onSignOutComplete: () -> Unit = {}
 ) {
     scope.launch {
         withContext(NonCancellable) {
             try {
-                credentialManager.clearCredentialState(ClearCredentialStateRequest())
-            } catch (e: Exception) {
+                credentialManager?.clearCredentialState(ClearCredentialStateRequest())
+            } catch (e: Throwable) {
                 Log.w("Auth", "Failed to clear credential state: ${e.message}")
             } finally {
-                Firebase.auth.signOut()
+                try {
+                    Firebase.auth.signOut()
+                } catch (t: Throwable) {
+                    Log.w("Auth", "FirebaseAuth signOut warning: ${t.message}")
+                }
                 onSignOutComplete()
             }
         }
@@ -145,7 +187,7 @@ private fun resolveDefaultWebClientId(context: Context): String {
             context.packageName
         )
         if (resId != 0) context.getString(resId).trim() else ""
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         ""
     }
 }
