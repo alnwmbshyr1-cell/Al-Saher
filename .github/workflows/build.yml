@@ -41,6 +41,15 @@ jobs:
         with:
           gradle-version: "9.3.1"
 
+      - name: Restore debug keystore
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            base64 --decode debug.keystore.base64 > debug.keystore
+            ls -lh debug.keystore
+          else
+            echo "No debug.keystore.base64 found"
+          fi
+
       - name: Build Debug APK
         run: |
           if [ -f "./gradlew" ]; then
