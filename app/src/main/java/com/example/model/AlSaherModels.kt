@@ -24,7 +24,9 @@ enum class WorkspaceDestination(val arabicTitle: String) {
     GAME_MAKER("صانع الألعاب"),
     CONNECTORS("الموصلات"),
     REMOTE_CONTROL("التحكم عن بُعد"),
-    AUTOMATIONS("الأتمتة")
+    AUTOMATIONS("الأتمتة"),
+    USAGE_DASHBOARD("لوحة الاستهلاك"),
+    SETTINGS("الإعدادات والحساب")
 }
 
 enum class GeminiChatTier(val modelName: String, val arabicLabel: String) {
@@ -104,6 +106,15 @@ data class UserProfile(
     val creditsBalance: Long = 1000L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+data class AccountPreferences(
+    val isDarkTheme: Boolean = true,
+    val notifyOnComplete: Boolean = true,
+    val defaultAgentMode: AgentMode = AgentMode.AGENT,
+    val defaultChatTier: GeminiChatTier = GeminiChatTier.GENERAL,
+    val defaultChatbotRole: ChatbotRole = ChatbotRole.GENERAL_ASSISTANT,
+    val defaultSearchGrounding: Boolean = true
 )
 
 @Keep

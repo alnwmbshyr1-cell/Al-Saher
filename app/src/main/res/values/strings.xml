@@ -22,4 +22,11 @@
     <string name="chat_screen_copy_desc">نسخ نص الرد</string>
     <string name="chat_screen_sources_title">المصادر من بحث Google:</string>
     <string name="chat_screen_streaming_status">وكيل الساحر يكتب الآن...</string>
+    <string name="settings_screen_icon_desc">أيقونة الإعدادات</string>
+    <string name="settings_screen_title">الإعدادات وإدارة الحساب</string>
+    <string name="settings_screen_subtitle">عرض بيانات ملفك الشخصي وتخصيص تفضيلات التطبيق</string>
+    <string name="settings_verified_account_desc">حساب موثق</string>
+    <string name="usage_dashboard_icon_desc">أيقونة لوحة الاستهلاك</string>
+    <string name="usage_dashboard_title">لوحة استهلاك الذكاء الاصطناعي</string>
+    <string name="usage_dashboard_subtitle">متابعة استهلاك النقاط اليومي والشهري وتوزيع الخدمات من سجل مهامك</string>
 </resources>

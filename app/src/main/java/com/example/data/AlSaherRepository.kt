@@ -144,6 +144,31 @@ class AlSaherRepository(
         }
     }
 
+    suspend fun updateUserProfileInfo(userId: String, displayName: String, email: String): Result<Unit> {
+        val docPath = "users/$userId"
+        return try {
+            val uid = requireUserId()
+            check(uid == userId)
+            val safeName = displayName.trim().take(100)
+            require(safeName.isNotEmpty()) { "الاسم المعروض لا يمكن أن يكون فارغاً." }
+            val safeEmail = email.trim().take(120)
+            db.collection("users").document(uid)
+                .update(
+                    mapOf(
+                        "displayName" to safeName,
+                        "email" to safeEmail,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docPath)
+            Result.failure(e)
+        }
+    }
+
     // --- TASKS & MESSAGES ---
     fun observeTasks(userId: String): Flow<List<AgentTask>> = flow {
         val path = "users/$userId/tasks"

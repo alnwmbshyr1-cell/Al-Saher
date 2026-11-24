@@ -11,17 +11,20 @@ jobs:
     name: Build Debug APK
     runs-on: ubuntu-latest
 
+    env:
+      GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21 (required for AGP 9.1.1 & Gradle 9.3.1 parity)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
-      - name: Prepare pre-installed Android SDK & accept licenses
+      - name: Prepare Android SDK licenses & platform 36
         run: |
           SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
@@ -31,6 +34,8 @@ jobs:
           if [ -n "$SDKMANAGER" ]; then
             echo "Found sdkmanager at $SDKMANAGER"
             (set +o pipefail; yes | "$SDKMANAGER" --licenses > /dev/null)
+            "$SDKMANAGER" --install "platform-tools" "platforms;android-36.1" "build-tools;36.0.0" || \
+              "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" || true
           else
             echo "Warning: sdkmanager not found in $SDK_DIR"
           fi
@@ -57,7 +62,7 @@ jobs:
           gradle-version: "9.3.1"
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle assembleDebug --console=plain --stacktrace
 
       - name: Upload app-debug.apk Artifact
         uses: actions/upload-artifact@v4

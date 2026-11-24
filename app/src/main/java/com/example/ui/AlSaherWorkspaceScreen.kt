@@ -66,12 +66,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.firebase.signOutUser
+import com.example.model.AccountPreferences
 import com.example.model.AudioTranscribeUiState
 import com.example.model.ChatbotRole
 import com.example.model.GeminiChatTier
 import com.example.model.ImageGenUiState
 import com.example.model.LiveVoiceUiState
 import com.example.model.UiState
+import com.example.model.UserProfile
 import com.example.model.WorkspaceDestination
 import com.example.ui.components.AudioTranscribeDialog
 import com.example.ui.components.CenterChatPane
@@ -87,7 +89,9 @@ import com.example.ui.screens.DocsResearchStudioScreen
 import com.example.ui.screens.ImageStudioScreen
 import com.example.ui.screens.PricingDialog
 import com.example.ui.screens.RemoteControlScreen
+import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SlidesStudioScreen
+import com.example.ui.screens.UsageDashboardScreen
 import com.example.ui.screens.VideoStudioScreen
 import com.example.util.ChatExportFormat
 import com.example.util.ChatExportHelper
@@ -120,6 +124,8 @@ fun AlSaherWorkspaceScreen(
     val imageStudioState by viewModel.imageStudioState.collectAsStateWithLifecycle()
     val liveVoiceState by viewModel.liveVoiceState.collectAsStateWithLifecycle()
     val audioTranscribeState by viewModel.audioTranscribeState.collectAsStateWithLifecycle()
+    val accountPreferences by viewModel.accountPreferences.collectAsStateWithLifecycle()
+    val isSavingProfile by viewModel.isSavingProfile.collectAsStateWithLifecycle()
 
     val userProfileState by viewModel.userProfile.collectAsStateWithLifecycle()
     val tasksState by viewModel.tasks.collectAsStateWithLifecycle()
@@ -381,6 +387,7 @@ fun AlSaherWorkspaceScreen(
                                         destination = destination,
                                         viewModel = viewModel,
                                         activeTask = activeTask,
+                                        tasks = tasks,
                                         messages = messages,
                                         streamingReply = streamingReply,
                                         agentMode = agentMode,
@@ -407,6 +414,10 @@ fun AlSaherWorkspaceScreen(
                                         remoteLogs = remoteLogs,
                                         canExportChat = tasks.isNotEmpty(),
                                         onExportChat = { showExportDialog = true },
+                                        userProfile = userProfile,
+                                        accountPreferences = accountPreferences,
+                                        isSavingProfile = isSavingProfile,
+                                        onSignOut = { signOutUser(credentialManager, scope) },
                                         onOpenStepsSheet = if (!isWideScreen) {
                                             { showRightStepsPanel = true }
                                         } else null
@@ -561,6 +572,7 @@ private fun CenterContentRouter(
     destination: WorkspaceDestination,
     viewModel: AlSaherViewModel,
     activeTask: com.example.model.AgentTask?,
+    tasks: List<com.example.model.AgentTask>,
     messages: List<com.example.model.TaskMessage>,
     streamingReply: String?,
     agentMode: com.example.model.AgentMode,
@@ -584,6 +596,10 @@ private fun CenterContentRouter(
     remoteLogs: List<com.example.model.RemoteLogEntry>,
     canExportChat: Boolean,
     onExportChat: () -> Unit,
+    userProfile: UserProfile?,
+    accountPreferences: AccountPreferences,
+    isSavingProfile: Boolean,
+    onSignOut: () -> Unit,
     onOpenStepsSheet: (() -> Unit)?
 ) {
     val context = LocalContext.current
@@ -685,6 +701,27 @@ private fun CenterContentRouter(
             onToggleAutomation = { viewModel.toggleAutomation(it) },
             onTriggerNow = { viewModel.triggerAutomationNow(it, context) },
             onDeleteAutomation = { viewModel.deleteAutomation(it) }
+        )
+        WorkspaceDestination.USAGE_DASHBOARD -> UsageDashboardScreen(
+            tasks = tasks,
+            userProfile = userProfile,
+            onOpenPricing = { viewModel.setShowPricingSheet(true) }
+        )
+        WorkspaceDestination.SETTINGS -> SettingsScreen(
+            userProfile = userProfile,
+            preferences = accountPreferences,
+            isSavingProfile = isSavingProfile,
+            canExportHistory = canExportChat,
+            onSaveProfile = { name, email -> viewModel.updateUserProfile(name, email) },
+            onSetDarkTheme = { viewModel.setDarkTheme(it) },
+            onSetNotifyOnComplete = { viewModel.setNotifyOnComplete(it) },
+            onSetDefaultAgentMode = { viewModel.setDefaultAgentModePreference(it) },
+            onSetDefaultChatTier = { viewModel.setChatTier(it) },
+            onSetDefaultChatbotRole = { viewModel.setChatbotRole(it) },
+            onSetDefaultSearchGrounding = { viewModel.setDefaultSearchGrounding(it) },
+            onOpenPricing = { viewModel.setShowPricingSheet(true) },
+            onExportHistory = onExportChat,
+            onSignOut = onSignOut
         )
     }
 }

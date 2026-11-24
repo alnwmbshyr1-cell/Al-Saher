@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DesktopWindows
@@ -191,6 +192,22 @@ private val cloudAutomationTools = listOf(
         selectedIcon = Icons.Filled.AutoMode,
         unselectedIcon = Icons.Outlined.AutoMode,
         testTag = "nav_automations"
+    ),
+    DrawerToolSpec(
+        destination = WorkspaceDestination.USAGE_DASHBOARD,
+        title = "لوحة الاستهلاك",
+        subtitle = "مخطط استهلاك النقاط اليومي والشهري",
+        selectedIcon = Icons.Filled.BarChart,
+        unselectedIcon = Icons.Filled.BarChart,
+        testTag = "nav_usage_dashboard"
+    ),
+    DrawerToolSpec(
+        destination = WorkspaceDestination.SETTINGS,
+        title = "الإعدادات والحساب",
+        subtitle = "الملف الشخصي، التفضيلات والباقة",
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Filled.Settings,
+        testTag = "nav_settings"
     )
 )
 

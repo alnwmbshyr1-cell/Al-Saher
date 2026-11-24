@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.ai.AlSaherAiService
 import com.example.data.AlSaherRepository
 import com.example.data.ThemePreferences
+import com.example.model.AccountPreferences
 import com.example.model.AgentMode
 import com.example.model.AgentTask
 import com.example.model.AudioTranscribeUiState
@@ -144,6 +145,12 @@ class AlSaherViewModel(
     private val _isExportingChat = MutableStateFlow(false)
     val isExportingChat: StateFlow<Boolean> = _isExportingChat.asStateFlow()
 
+    private val _isSavingProfile = MutableStateFlow(false)
+    val isSavingProfile: StateFlow<Boolean> = _isSavingProfile.asStateFlow()
+
+    private val _accountPreferences = MutableStateFlow(AccountPreferences())
+    val accountPreferences: StateFlow<AccountPreferences> = _accountPreferences.asStateFlow()
+
     // Studio state holders
     private val _activeVideoProjectId = MutableStateFlow<String?>(null)
     private val _videoTimeline = MutableStateFlow<VideoTimelineModel?>(null)
@@ -252,8 +259,18 @@ class AlSaherViewModel(
         }
         themePreferences?.let { prefs ->
             viewModelScope.launch {
-                prefs.isDarkThemeFlow.collect { savedDark ->
-                    _isDarkTheme.value = savedDark
+                var firstLoad = true
+                prefs.accountPreferencesFlow.collect { savedPrefs ->
+                    _accountPreferences.value = savedPrefs
+                    _isDarkTheme.value = savedPrefs.isDarkTheme
+                    _notifyOnComplete.value = savedPrefs.notifyOnComplete
+                    if (firstLoad) {
+                        _agentMode.value = savedPrefs.defaultAgentMode
+                        _chatTier.value = savedPrefs.defaultChatTier
+                        _chatbotRole.value = savedPrefs.defaultChatbotRole
+                        _searchGroundingEnabled.value = savedPrefs.defaultSearchGrounding
+                        firstLoad = false
+                    }
                 }
             }
         }
@@ -303,6 +320,16 @@ class AlSaherViewModel(
 
     fun setNotifyOnComplete(enabled: Boolean) {
         _notifyOnComplete.value = enabled
+        themePreferences?.let { prefs ->
+            viewModelScope.launch { prefs.setNotifyOnComplete(enabled) }
+        }
+    }
+
+    fun setDefaultAgentModePreference(mode: AgentMode) {
+        _agentMode.value = mode
+        themePreferences?.let { prefs ->
+            viewModelScope.launch { prefs.setDefaultAgentMode(mode) }
+        }
     }
 
     fun setShowPricingSheet(show: Boolean) {
@@ -311,18 +338,55 @@ class AlSaherViewModel(
 
     fun setChatTier(tier: GeminiChatTier) {
         _chatTier.value = tier
+        themePreferences?.let { prefs ->
+            viewModelScope.launch { prefs.setDefaultChatTier(tier) }
+        }
     }
 
     fun setChatbotRole(role: ChatbotRole) {
         _chatbotRole.value = role
+        themePreferences?.let { prefs ->
+            viewModelScope.launch { prefs.setDefaultChatbotRole(role) }
+        }
     }
 
     fun toggleSearchGrounding() {
-        _searchGroundingEnabled.value = !_searchGroundingEnabled.value
+        val next = !_searchGroundingEnabled.value
+        _searchGroundingEnabled.value = next
+        themePreferences?.let { prefs ->
+            viewModelScope.launch { prefs.setDefaultSearchGrounding(next) }
+        }
+    }
+
+    fun setDefaultSearchGrounding(enabled: Boolean) {
+        _searchGroundingEnabled.value = enabled
+        themePreferences?.let { prefs ->
+            viewModelScope.launch { prefs.setDefaultSearchGrounding(enabled) }
+        }
     }
 
     fun toggleMapsGrounding() {
         _mapsGroundingEnabled.value = !_mapsGroundingEnabled.value
+    }
+
+    fun updateUserProfile(displayName: String, email: String) {
+        val cleanName = displayName.trim()
+        if (cleanName.isEmpty()) {
+            _errorBanner.value = "يرجى إدخال الاسم المعروض قبل الحفظ."
+            return
+        }
+        viewModelScope.launch {
+            _isSavingProfile.value = true
+            _errorBanner.value = null
+            repository.updateUserProfileInfo(currentUserId, cleanName, email)
+                .onSuccess {
+                    _statusMessage.value = "تم تحديث بيانات الحساب بنجاح."
+                }
+                .onFailure { error ->
+                    _errorBanner.value = error.localizedMessage ?: "تعذر حفظ بيانات الحساب."
+                }
+            _isSavingProfile.value = false
+        }
     }
 
     @OptIn(PublicPreviewAPI::class)

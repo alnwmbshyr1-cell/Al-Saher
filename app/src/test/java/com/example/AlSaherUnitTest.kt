@@ -1,6 +1,7 @@
 package com.example
 
 import android.speech.SpeechRecognizer
+import com.example.model.AccountPreferences
 import com.example.model.AgentMode
 import com.example.model.AgentTask
 import com.example.model.AudioTranscribeUiState
@@ -23,6 +24,7 @@ import com.example.util.ChatExportFormat
 import com.example.util.ChatExportHelper
 import com.example.util.ChatExportScope
 import com.example.util.ExportableConversation
+import com.example.util.UsageAnalyticsHelper
 import com.example.util.mapSpeechErrorToArabic
 import com.example.util.mergeVoiceTranscript
 import com.example.viewmodel.AgentChatMessage
@@ -31,6 +33,9 @@ import com.example.viewmodel.ChatScreenUiState
 import com.example.viewmodel.ChatTurnUiState
 import com.example.viewmodel.OFFICIAL_CONNECTORS
 import com.example.viewmodel.buildGeminiChatHistory
+import com.google.firebase.Timestamp
+import java.util.Date
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -186,5 +191,66 @@ class AlSaherUnitTest {
             turnState = ChatTurnUiState.Streaming("جاري الكتابة")
         )
         assertTrue(state.turnState is ChatTurnUiState.Streaming)
+    }
+
+    @Test
+    fun accountPreferencesDefaultsAndSettingsDestinationAreConfigured() {
+        val prefs = AccountPreferences()
+        assertTrue(prefs.isDarkTheme)
+        assertTrue(prefs.notifyOnComplete)
+        assertEquals(AgentMode.AGENT, prefs.defaultAgentMode)
+        assertEquals(GeminiChatTier.GENERAL, prefs.defaultChatTier)
+        assertEquals(ChatbotRole.GENERAL_ASSISTANT, prefs.defaultChatbotRole)
+        assertTrue(prefs.defaultSearchGrounding)
+        assertTrue(WorkspaceDestination.entries.contains(WorkspaceDestination.SETTINGS))
+        assertTrue(WorkspaceDestination.entries.contains(WorkspaceDestination.USAGE_DASHBOARD))
+    }
+
+    @Test
+    fun usageAnalyticsHelperAggregatesDailyMonthlyAndCategoryUsage() {
+        val utc = TimeZone.getTimeZone("UTC")
+        val nowMillis = 1_795_520_000_000L // fixed UTC reference timestamp
+        val twoDaysAgoMillis = nowMillis - (2L * 24L * 60L * 60L * 1000L)
+
+        val tasks = listOf(
+            AgentTask(
+                id = "t1",
+                category = "GENERAL",
+                creditsUsed = 20L,
+                createdAt = Timestamp(Date(nowMillis))
+            ),
+            AgentTask(
+                id = "t2",
+                category = "VIDEO",
+                creditsUsed = 15L,
+                createdAt = Timestamp(Date(nowMillis))
+            ),
+            AgentTask(
+                id = "t3",
+                category = "RESEARCH",
+                creditsUsed = 15L,
+                createdAt = Timestamp(Date(twoDaysAgoMillis))
+            )
+        )
+        val profile = UserProfile(plan = "FREE", creditsBalance = 950L)
+
+        val summary = UsageAnalyticsHelper.buildSummary(
+            tasks = tasks,
+            userProfile = profile,
+            nowMillis = nowMillis,
+            timeZone = utc
+        )
+
+        assertEquals(50L, summary.totalCreditsUsed)
+        assertEquals(950L, summary.remainingCredits)
+        assertEquals(1000L, summary.creditQuota)
+        assertEquals(3, summary.totalTasksCount)
+        assertEquals(7, summary.dailySeries.size)
+        assertEquals(6, summary.monthlySeries.size)
+        assertEquals(35L, summary.dailySeries.last().creditsUsed)
+        assertEquals(15L, summary.dailySeries[4].creditsUsed)
+        assertEquals(35L, summary.peakDayCredits)
+        assertEquals(50L, summary.monthlySeries.last().creditsUsed)
+        assertEquals(3, summary.categoryBreakdown.size)
     }
 }
