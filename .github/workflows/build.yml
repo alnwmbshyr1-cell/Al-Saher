@@ -21,8 +21,19 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK & Accept Licenses
-        uses: android-actions/setup-android@v3
+      - name: Prepare pre-installed Android SDK & accept licenses
+        run: |
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$SDK_DIR/licenses"
+          SDKMANAGER="$(find "$SDK_DIR" -name sdkmanager -type f | head -n 1 || true)"
+          if [ -n "$SDKMANAGER" ]; then
+            echo "Found sdkmanager at $SDKMANAGER"
+            (set +o pipefail; yes | "$SDKMANAGER" --licenses > /dev/null)
+          else
+            echo "Warning: sdkmanager not found in $SDK_DIR"
+          fi
 
       - name: Prepare debug keystore
         run: |
