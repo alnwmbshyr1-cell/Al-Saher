@@ -31,8 +31,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Mandatory: Configure App Check with launch intent before setContent, ViewModels, or Firebase calls
-        configureAppCheck(this, intent)
+        // FIX: App Check يجب ان لا يطفي التطبيق ابداً
+        try {
+            configureAppCheck(this, intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // نكمل بدون App Check، التطبيق يفتح عادي
+        }
 
         enableEdgeToEdge()
 
@@ -68,8 +73,17 @@ private fun AlSaherAppRoot() {
                         val app = checkNotNull(this[APPLICATION_KEY]) {
                             "APPLICATION_KEY missing from CreationExtras"
                         }
-                        val databaseId = app.getString(R.string.firestore_database_id)
-                        val db = FirebaseFirestore.getInstance(databaseId)
+                        val databaseId = try {
+                            app.getString(R.string.firestore_database_id)
+                        } catch (e: Exception) {
+                            "ai-studio-android-alsaher-f3f4cb4f-aa39-400b-81c2-91303e09ca50"
+                        }
+                        // FIX: لو فشل الاتصال بقاعدة البيانات المخصصة، ارجع للافتراضية ولا تطفي
+                        val db = try {
+                            FirebaseFirestore.getInstance(databaseId)
+                        } catch (e: Exception) {
+                            FirebaseFirestore.getInstance()
+                        }
                         AlSaherViewModel(
                             repository = AlSaherRepository(db),
                             aiService = AlSaherAiService(),
