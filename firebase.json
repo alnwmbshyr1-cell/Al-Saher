@@ -4,14 +4,5 @@
       "database": "ai-studio-android-alsaher-f3f4cb4f-aa39-400b-81c2-91303e09ca50",
       "rules": "firestore.rules"
     }
-  ],
-  "emulators": {
-    "firestore": {
-      "host": "127.0.0.1",
-      "port": 8085
-    },
-    "ui": {
-      "enabled": false
-    }
-  }
+  ]
 }
